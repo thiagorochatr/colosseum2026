@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+# Read-only by default. Nothing here publishes, comments or writes, so nothing
+# here needs a token that could.
+permissions:
+  contents: read
+
+# Third-party actions are pinned to commit SHAs rather than tags. A tag is a
+# mutable pointer: `@v4` is whatever its owner last moved it to, and a compromised
+# or retagged action runs with this workflow's token and this repository's cache.
+# The version each SHA corresponds to is in the comment beside it.
+jobs:
+  # One job running `make verify`, which is the command the README tells a reader
+  # to run. Splitting the host checks from the SBF build let them drift: the
+  # end-to-end suite needs the .so, so a job without the Solana toolchain ran
+  # twenty tests that could only panic, and the artifact never crossed between
+  # runners. If CI and the documented command are the same command, they cannot
+  # disagree.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Cache cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache the Solana toolchain
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.local/share/solana
+          key: ${{ runner.os }}-solana-stable
+
+      - name: Install Agave
+        run: |
+          if [ ! -x "$HOME/.local/share/solana/install/active_release/bin/solana" ]; then
+            sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
+          fi
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      - run: solana --version
+
+      - name: make verify
+        run: make verify
+
+  # The dependency tree is part of the threat surface: a compromised transitive
+  # crate in the proving path sees the witness and one in the client sees the
+  # note. Separate from `verify` because it needs no Solana toolchain and because
+  # a supply-chain failure should be legible as one rather than buried in a test
+  # log. `deny.toml` carries the policy, and every exception in it is written
+  # down with the reason it is an exception.
+  supply-chain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check advisories bans licenses sources

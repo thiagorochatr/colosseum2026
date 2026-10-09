@@ -1,0 +1,149 @@
+{
+  "pool": "Cqg4gj4zwHZGfp1P2v6j6pB4dLbWgsL1vJB7YkjsFWAK",
+  "vault": "6NrJ3id157J7qMi5veukujtvX6T5rJz1WZT1m6gd8eMZ",
+  "denomination": 43000007,
+  "ceiling": {
+    "divergent": 6,
+    "uniform": 7,
+    "divergent_bytes": 1194,
+    "over_bytes": 1332,
+    "budget_bytes": 40
+  },
+  "roster": [
+    {
+      "stake": "5P9AHY2tGoQ9xedLeyvC5WsU4FXxxH8LgtC2kzRUMZtT",
+      "vote": "vgcDar2pryHvMgPkKaZfh8pQy4BJxv7SpwUG7zinWjG",
+      "relay": "7GC9vjEJTUk1d3DLfb9ufBuSo4ooU5HzAmzeGdFejtBX"
+    },
+    {
+      "stake": "DrrzXbAmLdgLfmcGtN1mAjgEuRK5mPyRSVcwazUtUWaT",
+      "vote": "i7NyKBMJCA9bLM2nsGyAGCKHECuR2L5eh4GqFciuwNT",
+      "relay": "CDNhhfH3qspD6Bgwsd6i7T6EGjE3r7yWPGBwaHyi5TXM"
+    },
+    {
+      "stake": "EgGXn9y2ea9bDqGoUpU6Z8ET2JNm6zNaFu1Ux2x6RNNx",
+      "vote": "5ZWgXcyqrrNpQHCme5SdC5hCeYb2o3fEJhF7Gok3bTVN",
+      "relay": "2UWeNWf8yg3UPbeycv6SMoKLjmbtD2XgAX8wiQ92RouF"
+    },
+    {
+      "stake": "FgWdYn2gN9oUxN18NJ958BkgR5zoCFagWp73pQ1YHc9x",
+      "vote": "23AoPQc3EPkfLWb14cKiWNahh1H9rtb3UBk8gWseohjF",
+      "relay": "D1oCaiaGCJGyi2Co7mE7W5nMpcATdDnGtGMSGrk8Qcpw"
+    },
+    {
+      "stake": "Fa8khDvR3arVezDmDZpLPHA4VVwRuSwzfJ2gcDSKQmDo",
+      "vote": "7AETLyAGJWjp6AWzZqZcP362yv5LQ3nLEdwnXNjdNwwF",
+      "relay": "DtoAEYygmCWw156gn4DB1ZCUTJ9szUbT7mLxqNs5bTos"
+    },
+    {
+      "stake": "B5unNLodBUxcsggqV4g1KzoyAXz4oNHN3bEnRTJ1Fmkw",
+      "vote": "2u83Dx5qPV4QnujjJQv8v2SoqG1ixuAxPK5Jwhtkovd1",
+      "relay": "3dYe9vTAVYpsrSYtxLRrawFYQaMNQsLhqhscmFhRKobY"
+    }
+  ],
+  "signature": "5SqtqpuJw3pAoBMMB9DmXaqFr93rWsnqWMyacRZ3ZpP5eQpacLTAjrYugAW2ni3PMucAzDLJ4TsLZU3aQd3ZVMPZ",
+  "bytes": 1194,
+  "compute_units": 142856,
+  "steps": [
+    {
+      "name": "init_pool",
+      "signature": "5dPVS1efe2JcqJxV26Lxk5QwnTdsy8qfxc6wbFJXKNM9ES16qx6gG7P53c9RLnuMkzswjM9yoW4JEScrwYYg4HSN",
+      "note": "denomination 43000007, k_floor 6"
+    },
+    {
+      "name": "deposit",
+      "signature": "4eTFg35LP21D3HCQYn2DE7WExrhNZsmyfh39i7GMYe9bxfsyEhdJJ2STDt2c6SmaeEGAB1whQbRtqbr71kRoMfDr",
+      "note": "note 1"
+    },
+    {
+      "name": "deposit",
+      "signature": "2BqmBu6anyCMhyvexeVsuH9zLB847bW1xBNndxeidCU7FYma3VyxcqTUEmRRVvJgH95MtTzsuEbwcRuxD4K25VQm",
+      "note": "note 2"
+    },
+    {
+      "name": "deposit",
+      "signature": "7RwN4jc54ioVS7Y8m8p9PKGnU2vPrwPpK7jRZ4RvfmF4TWCniBxzNrxzbXpkFt3R6VWhfKnvP4d5sypGrCCXq2E",
+      "note": "note 3"
+    },
+    {
+      "name": "deposit",
+      "signature": "3drHxm9YgHi4VUy45HRVbmtZQe76oaPF7dxYWh6VAXKiJhUG7uBscPuDhmZVzRdnmFHtvg72PR9qwMU4RizpKPiE",
+      "note": "note 4"
+    },
+    {
+      "name": "deposit",
+      "signature": "2YB3RHGPCu3cY3tXjnRkFisd7q2JYZUnYB2z8hC11FHbX5YAsGjSiAs7BJbGTg4JHXE3FVwSVpz9t9NFevdQ5Gxh",
+      "note": "note 5"
+    },
+    {
+      "name": "deposit",
+      "signature": "2UHgtUdLYJQmqBXcJWPJPK7VM6uBLKqaZdcMucXWoUUVpYV4Cnk8ox1jMUSZx9DJk6Xp6EKEQtxL9WLdWP4jT2ZL",
+      "note": "note 6"
+    },
+    {
+      "name": "create stake account",
+      "signature": "28djx5Y9hNmg58XbTzd4if4N6H2kZUwfREBKtdrCsFnV6Gu6bb6ptrGtMzL6VoZnVYSFKRXQTDNcKHdLUiQoGHwq",
+      "note": "1100000000 lamports, staker = the pool's vault"
+    },
+    {
+      "name": "submit_spend",
+      "signature": "5D6VC6czzJ79fzuvvXuNHX5xcV5p7Gbv6hxDwHzgt5QtHHKScu11hYSBkdPPe7kQoUhhQEBoyiDPzjWGGVnroyFT",
+      "note": "note 0, relay-signed, delegate to vgcDar2pryHvMgPkKaZfh8pQy4BJxv7SpwUG7zinWjG"
+    },
+    {
+      "name": "create stake account",
+      "signature": "2Tv4CZSFD8wxpuhiihsw2xEd53bxTE7i6ka1dpZvzhcfDqXxdCL8k1jydgPCjJ7pUuL4CuPHP11BnJHPqjsawK6V",
+      "note": "1100000000 lamports, staker = the pool's vault"
+    },
+    {
+      "name": "submit_spend",
+      "signature": "4gpxQ7UzGNKBwft1Y8dmDszs2jRz1S1Q2RZsFkLf4AjmyY1B3YNSyPoLPA5uqbRonWx2SkYZCYFtyS5AZN2EKsGK",
+      "note": "note 1, relay-signed, delegate to i7NyKBMJCA9bLM2nsGyAGCKHECuR2L5eh4GqFciuwNT"
+    },
+    {
+      "name": "create stake account",
+      "signature": "3znGocR1LKMkffXQ1yHm9BKfhbM1o4Y6r22J3vyKjGLK76fAfArMxe7CeoP8sk4umStTt7f7EtSKbe29zaz4iges",
+      "note": "1100000000 lamports, staker = the pool's vault"
+    },
+    {
+      "name": "submit_spend",
+      "signature": "2YBakbrJy1CXTaJpkxwAr54EW5PdWytG4P2ycJqFyRx48tdKKMqMuejEjS9JaMGmxGHKY9uiJ623tjb8ErDUFHS1",
+      "note": "note 2, relay-signed, delegate to 5ZWgXcyqrrNpQHCme5SdC5hCeYb2o3fEJhF7Gok3bTVN"
+    },
+    {
+      "name": "create stake account",
+      "signature": "MhASpmqysCWXNrS5B36RVopqKnQKFcSRanQBd1nueD2bCck4SQBvJEqYy98ajhb9JC8UcvvncjRQcghnDyXYqzf",
+      "note": "1100000000 lamports, staker = the pool's vault"
+    },
+    {
+      "name": "submit_spend",
+      "signature": "uEZXvq615hGxgeKKYmrpP4YPp5B3xygRUNAgZ4ddCH47q6NypgQqR49B8U1vMB9XVWnZQaPjqcqbV1JeQgAKFvN",
+      "note": "note 3, relay-signed, delegate to 23AoPQc3EPkfLWb14cKiWNahh1H9rtb3UBk8gWseohjF"
+    },
+    {
+      "name": "create stake account",
+      "signature": "3JYyJ1ZnuGUdX888cV4zkqmhqTd42zE8QAbo3x8jJ6bfnC4MZT2RkiQkLHnqtjkNJmTQSAeQDLbEVwWRXaMmS5ES",
+      "note": "1100000000 lamports, staker = the pool's vault"
+    },
+    {
+      "name": "submit_spend",
+      "signature": "5KE1wc2VZh6GTLiiVNQ8Xad92hHoKNARZ8AEWQvwJeBsfLJ93Cc6GkvVtieTdwCh5ZjPcDTwk31Jjzwshtemr7XN",
+      "note": "note 4, relay-signed, delegate to 7AETLyAGJWjp6AWzZqZcP362yv5LQ3nLEdwnXNjdNwwF"
+    },
+    {
+      "name": "create stake account",
+      "signature": "2fRNA4wLYzoJceT2HmAXEPrvK1Sv1haqfRJK7vDDcyKCLQPa65ebcE9u6Lm8DZbdgfWm2LiaS5nDUzvxaCNrwecE",
+      "note": "1100000000 lamports, staker = the pool's vault"
+    },
+    {
+      "name": "submit_spend",
+      "signature": "4haLJna7fmp85ahKppvXR8bVgGSFmhsftxy1XEfuztZ8mKVKxdVzdwLVwS6CedD2fmzdMwPWc5Na2DAaNvUZdgQM",
+      "note": "note 5, relay-signed, delegate to 2u83Dx5qPV4QnujjJQv8v2SoqG1ixuAxPK5Jwhtkovd1"
+    },
+    {
+      "name": "settle_epoch",
+      "signature": "5SqtqpuJw3pAoBMMB9DmXaqFr93rWsnqWMyacRZ3ZpP5eQpacLTAjrYugAW2ni3PMucAzDLJ4TsLZU3aQd3ZVMPZ",
+      "note": "6 delegations to 6 different validators, one transaction, 1194 bytes"
+    }
+  ]
+}

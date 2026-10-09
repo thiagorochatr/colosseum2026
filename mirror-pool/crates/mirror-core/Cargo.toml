@@ -1,0 +1,16 @@
+[package]
+name = "mirror-core"
+version.workspace = true
+edition.workspace = true
+# Not published to crates.io: these crates are built from this repository, and a
+# registry copy would be a second source of truth for the same code.
+publish = false
+license.workspace = true
+
+# No arkworks here. mirror-core is linked into the on-chain program, and every
+# byte of arkworks in the .so is a stack frame we cannot afford. Field elements
+# cross this boundary as canonical 32-byte big-endian arrays.
+[dependencies]
+solana-poseidon.workspace = true
+solana-keccak-hasher.workspace = true
+thiserror.workspace = true

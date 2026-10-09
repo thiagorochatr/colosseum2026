@@ -1,0 +1,15 @@
+[package]
+name = "mirror-provenance"
+version.workspace = true
+edition.workspace = true
+# Not published to crates.io: these crates are built from this repository, and a
+# registry copy would be a second source of truth for the same code.
+publish = false
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ureq.workspace = true

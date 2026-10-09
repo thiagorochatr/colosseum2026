@@ -1,0 +1,29 @@
+[package]
+name = "mirror-circuit"
+version.workspace = true
+edition.workspace = true
+# Not published to crates.io: these crates are built from this repository, and a
+# registry copy would be a second source of truth for the same code.
+publish = false
+license.workspace = true
+
+# Host-only crate: proving, key generation and the R1CS gadget. Never linked
+# into the on-chain program.
+[dependencies]
+mirror-core.workspace = true
+ark-bn254.workspace = true
+ark-ff.workspace = true
+ark-ec.workspace = true
+ark-relations.workspace = true
+ark-r1cs-std.workspace = true
+ark-groth16.workspace = true
+ark-snark.workspace = true
+ark-serialize.workspace = true
+ark-std.workspace = true
+ark-crypto-primitives.workspace = true
+light-poseidon.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+solana-poseidon.workspace = true
+groth16-solana.workspace = true

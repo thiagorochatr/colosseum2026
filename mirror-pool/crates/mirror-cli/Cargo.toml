@@ -1,0 +1,34 @@
+[package]
+name = "mirror-cli"
+version.workspace = true
+edition.workspace = true
+# Not published to crates.io: these crates are built from this repository, and a
+# registry copy would be a second source of truth for the same code.
+publish = false
+license.workspace = true
+
+[[bin]]
+name = "mirror"
+path = "src/main.rs"
+
+[dependencies]
+mirror-core.workspace = true
+mirror-circuit.workspace = true
+mirror-provenance.workspace = true
+mirror-pool-program = { path = "../../programs/mirror-pool", default-features = false, features = ["no-entrypoint"] }
+solana-keypair.workspace = true
+solana-signer.workspace = true
+solana-transaction = { workspace = true, features = ["serde", "wincode"] }
+solana-program.workspace = true
+solana-message.workspace = true
+solana-system-interface.workspace = true
+ark-std.workspace = true
+ureq.workspace = true
+base64 = "0.22"
+bincode = "1.3"
+anyhow.workspace = true
+clap.workspace = true
+sha2.workspace = true
+hex.workspace = true
+serde.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,29 @@
+target/
+**/target/
+
+# Editor and tool state
+.DS_Store
+.claude/
+.idea/
+.vscode/
+
+# Never
+.env
+keys/
+*.keypair.json
+notes/
+
+# Build artefacts. The one exception is the third-party program the CPI tests
+# invoke: it is a fixture the suite loads, not something this repo builds.
+*.so
+!programs/**/fixtures/*.so
+
+# Vendored source, kept out of the tree
+sp4/
+
+# Live-run state, not deliverable. The note ledgers hold the secrets that
+# release a pool's escrow, and the plan files record which validator each
+# member of a run asked for. Both belong to one operator's run against one
+# cluster, and neither means anything to a reader of this repository.
+data/*-notes*.json
+data/crowd-plan-*.json

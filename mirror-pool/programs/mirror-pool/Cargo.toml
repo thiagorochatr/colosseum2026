@@ -1,0 +1,41 @@
+[package]
+name = "mirror-pool-program"
+version.workspace = true
+edition.workspace = true
+# Not published to crates.io: these crates are built from this repository, and a
+# registry copy would be a second source of truth for the same code.
+publish = false
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+mirror-core.workspace = true
+solana-program.workspace = true
+solana-system-interface.workspace = true
+groth16-solana.workspace = true
+
+[features]
+no-entrypoint = []
+
+[dev-dependencies]
+mirror-circuit.workspace = true
+litesvm.workspace = true
+solana-keypair.workspace = true
+solana-signer.workspace = true
+solana-transaction.workspace = true
+solana-message.workspace = true
+ark-std.workspace = true
+sha2.workspace = true
+hex.workspace = true
+solana-system-interface.workspace = true
+
+# The entrypoint! macro emits these; declaring them keeps `-D warnings` honest
+# rather than silencing the lint wholesale.
+[lints.rust.unexpected_cfgs]
+level = "warn"
+check-cfg = [
+    'cfg(target_os, values("solana"))',
+    'cfg(feature, values("custom-heap", "custom-panic"))',
+]

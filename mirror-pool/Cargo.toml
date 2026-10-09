@@ -1,0 +1,75 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/mirror-core",
+    "crates/mirror-circuit",
+    "crates/mirror-provenance",
+    "crates/mirror-cli",
+    "programs/mirror-pool",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/solanabr/mirror-pool"
+
+# The arkworks major must stay 0.5 across every crate: light-poseidon 0.4 is built
+# against 0.5, and Fr from 0.5 and 0.6 are distinct types that will not unify.
+[workspace.dependencies]
+ark-bn254 = { version = "0.5", default-features = false, features = ["curve"] }
+ark-ff = { version = "0.5", default-features = false }
+ark-ec = { version = "0.5", default-features = false }
+ark-relations = { version = "0.5", default-features = false }
+ark-r1cs-std = { version = "0.5", default-features = false }
+ark-groth16 = { version = "0.5", default-features = false }
+ark-snark = { version = "0.5", default-features = false }
+ark-serialize = { version = "0.5", default-features = false }
+ark-std = { version = "0.5", default-features = false }
+# solana-poseidon is deliberately the ONLY Poseidon entry point. It is cfg-gated
+# upstream: the `sol_poseidon` syscall on target_os = "solana", light-poseidon 0.4
+# over ark-bn254 0.5 off-chain. That gives host/chain parity for free and keeps
+# arkworks out of the .so — a pure-Rust Poseidon on SBF overflows the 4096-byte
+# stack frame and costs ~1500x the syscall even when it completes.
+solana-poseidon = "4.0"
+# Same cfg-gating as solana-poseidon: the syscall on-chain, sha3 off-chain.
+# Needed because an action payload is variable length and Poseidon is not.
+# The off-chain implementation sits behind the sha3 feature; without it the
+# host build compiles and then panics at first use.
+solana-keccak-hasher = { version = "3.1", features = ["sha3"] }
+# Host-only, and only for its published round constants, which the R1CS gadget
+# reads so that in-circuit hashing provably matches the syscall.
+light-poseidon = "0.4"
+# 0.5 gates constraints behind `r1cs`; 0.6 renamed it to `constraints` and moved
+# to ark_relations::gr1cs, which does not compose with our 0.5 pin.
+ark-crypto-primitives = { version = "0.5", default-features = false, features = ["sponge", "crh", "merkle_tree", "r1cs"] }
+groth16-solana = "0.2"
+solana-program = "4.0"
+# System instructions moved out of solana-program in 4.0.
+solana-system-interface = { version = "3.0", features = ["bincode"] }
+thiserror = "2"
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+sha2 = "0.10"
+hex = "0.4"
+# Blocking HTTP: collection is rate-limited and sequential, so an async
+# runtime would add machinery without buying throughput.
+ureq = { version = "2", features = ["json"] }
+# Test-only: runs the built .so in a real SVM. 0.15 targets Agave 4.1.1, which is
+# the toolchain the Makefile installs.
+litesvm = "0.15"
+solana-keypair = "3.1"
+solana-signer = "3"
+solana-transaction = { version = "4.1", features = ["serde", "wincode"] }
+solana-message = "4.2"
+
+mirror-core = { path = "crates/mirror-core" }
+mirror-circuit = { path = "crates/mirror-circuit" }
+mirror-provenance = { path = "crates/mirror-provenance" }
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
