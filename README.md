@@ -17,6 +17,8 @@ Work in progress.
 | Path | What it is |
 |---|---|
 | `mirror-pool/` | Prior work, imported unchanged. See below. |
+| `docs/SPEC.md` | The protocol: notes, trees, circuit, bindings, and each chain's contracts. |
+| `docs/THREAT_MODEL.md` | Who can do what, and the known limits. |
 
 ## Prior work
 
