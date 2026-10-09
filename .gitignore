@@ -1,0 +1,34 @@
+# Private strategy material: research, reports and the internal plan.
+# The repository is public; these never leave this machine.
+research_notes/
+reports/
+PLANO.md
+.private/
+
+# Build output
+target/
+**/target/
+node_modules/
+out/
+cache/
+broadcast/
+
+# Proving artefacts are regenerated or published on purpose, never by accident
+*.ptau
+*.zkey
+*_js/
+*.r1cs
+*.wtns
+
+# Secrets
+.env
+.env.*
+keys/
+*.keypair.json
+id.json
+
+# Editor and OS
+.DS_Store
+.idea/
+.vscode/
+.claude/
