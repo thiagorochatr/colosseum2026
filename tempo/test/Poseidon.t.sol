@@ -18,7 +18,10 @@ contract PoseidonTest is Test {
     }
 
     function test_matches_the_published_circomlib_vector() public pure {
-        assertEq(PoseidonT3.hash([uint256(1), uint256(2)]), 0x115cc0f5e7d690413df64c6b9662e9cf2a3617f2743245519e19607a4417189a);
+        assertEq(
+            PoseidonT3.hash([uint256(1), uint256(2)]),
+            0x115cc0f5e7d690413df64c6b9662e9cf2a3617f2743245519e19607a4417189a
+        );
     }
 
     function test_zero_ladder_matches_mirror_core() public pure {

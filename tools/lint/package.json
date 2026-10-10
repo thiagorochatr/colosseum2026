@@ -1,0 +1,15 @@
+{
+  "name": "lint",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "JavaScript lint for the whole repository. Its own package, outside the npm workspaces, so the deployed lockfile never carries it.",
+  "scripts": {
+    "lint": "cd ../.. && eslint --config tools/lint/eslint.config.mjs ."
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.11.0",
+    "globals": "17.12.0"
+  }
+}

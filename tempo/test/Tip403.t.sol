@@ -19,7 +19,8 @@ contract Tip403Test is Test {
 
     function setUp() public {
         token = ITIP20(
-            StdPrecompiles.TIP20_FACTORY.createToken("Demo USD", "dUSD", "USD", PATH_USD, address(this), bytes32("demo"))
+            StdPrecompiles.TIP20_FACTORY
+            .createToken("Demo USD", "dUSD", "USD", PATH_USD, address(this), bytes32("demo"))
         );
         ITIP20RolesAuth(address(token)).grantRole(token.ISSUER_ROLE(), address(this));
         token.mint(alice, 1_000e6);

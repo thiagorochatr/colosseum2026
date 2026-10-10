@@ -40,7 +40,9 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem("tab", tab);
-    } catch {}
+    } catch {
+      // Storage can be blocked; remembering the tab is only a convenience.
+    }
   }, [tab]);
 
   const chains = useMemo(() => (config ? { tempo: tempoChain(config.tempo), solana: solanaChain(config.solana) } : null), [config]);

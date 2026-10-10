@@ -42,7 +42,8 @@ contract CompliantPoolTest is Test {
 
     function setUp() public {
         token = ITIP20(
-            StdPrecompiles.TIP20_FACTORY.createToken("Demo USD", "dUSD", "USD", PATH_USD, address(this), bytes32("pool"))
+            StdPrecompiles.TIP20_FACTORY
+            .createToken("Demo USD", "dUSD", "USD", PATH_USD, address(this), bytes32("pool"))
         );
         ITIP20RolesAuth(address(token)).grantRole(token.ISSUER_ROLE(), address(this));
         policy = REGISTRY.createPolicy(address(this), ITIP403Registry.PolicyType.BLACKLIST);
@@ -85,7 +86,9 @@ contract CompliantPoolTest is Test {
     function csv(uint256[] memory xs) internal pure returns (string memory s) {
         if (xs.length == 0) return "-";
         s = vm.toString(xs[0]);
-        for (uint256 j = 1; j < xs.length; j++) s = string.concat(s, ",", vm.toString(xs[j]));
+        for (uint256 j = 1; j < xs.length; j++) {
+            s = string.concat(s, ",", vm.toString(xs[j]));
+        }
     }
 
     /// Proves note `i` at `index` against the trees as the SDK sees them, with
@@ -104,9 +107,8 @@ contract CompliantPoolTest is Test {
         cmd[6] = vm.toString(pool.bindingFor(recipient, relayer, fee));
         cmd[7] = csv(excludedView);
         cmd[8] = csv(leaves);
-        (p.ok, p.a, p.b, p.c, p.poolRoot, p.cleanRoot, p.nullifierHash) = abi.decode(
-            vm.ffi(cmd), (bool, uint256[2], uint256[2][2], uint256[2], uint256, uint256, uint256)
-        );
+        (p.ok, p.a, p.b, p.c, p.poolRoot, p.cleanRoot, p.nullifierHash) =
+            abi.decode(vm.ffi(cmd), (bool, uint256[2], uint256[2][2], uint256[2], uint256, uint256, uint256));
     }
 
     function prove(uint256 i, uint256 index, address recipient, uint256 fee) internal returns (Proof memory) {

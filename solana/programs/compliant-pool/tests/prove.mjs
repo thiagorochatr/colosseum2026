@@ -36,6 +36,8 @@ try {
     c: hex(s.c),
     inputs: [input.poolRoot, input.cleanRoot, input.nullifierHash, input.binding].map((x) => hex(fieldBytes(x))),
   };
-} catch {}
+} catch {
+  // The circuit refuses a witness for a note it cannot prove: ok stays false.
+}
 process.stdout.write(JSON.stringify(out));
 await terminate();
