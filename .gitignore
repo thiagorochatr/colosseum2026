@@ -51,3 +51,5 @@ solana/deployments/local*.json
 web/public/zk/
 web/dist/
 .vercel/
+.vercel
+.env*

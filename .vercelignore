@@ -1,0 +1,23 @@
+# An allowlist: Vercel uploads only what the build and the functions need.
+# Keys under .demo/, Rust build output, and everything else stay local. The
+# proving files are fetched from the ceremony-v1 release and checked by hash.
+/*
+!/package.json
+!/package-lock.json
+!/vercel.json
+!/api
+!/sdk
+!/web
+!/tempo
+/tempo/*
+!/tempo/deployments
+/tempo/deployments/31337*
+!/solana
+/solana/*
+!/solana/deployments
+/solana/deployments/local*
+/sdk/node_modules
+/sdk/test
+/web/node_modules
+/web/public/zk
+/web/dist
