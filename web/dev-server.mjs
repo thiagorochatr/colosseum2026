@@ -10,6 +10,12 @@ import { createServer as vite } from "vite";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const read = (p) => (existsSync(`${ROOT}${p}`) ? readFileSync(`${ROOT}${p}`, "utf8") : null);
+
+// Variables pulled from Vercel (`vercel env pull`), such as SOLANA_RPC.
+for (const line of (read(".env.local") ?? "").split("\n")) {
+  const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+  if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^"(.*)"$/, "$1");
+}
 const tempoKeys = read("tempo/.demo/42431-keys.json");
 if (tempoKeys) {
   const k = JSON.parse(tempoKeys);
