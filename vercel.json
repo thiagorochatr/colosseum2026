@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "outputDirectory": "web/dist",
+  "functions": {
+    "api/**/*.mjs": { "maxDuration": 60 }
+  },
+  "headers": [
+    { "source": "/zk/(.*)", "headers": [{ "key": "cache-control", "value": "public, max-age=31536000, immutable" }] }
+  ]
+}

@@ -16,5 +16,8 @@
     "compliance-sdk": "*",
     "@solana/web3.js": "1.99.0",
     "viem": "2.57.4"
+  },
+  "engines": {
+    "node": "24.x"
   }
 }
