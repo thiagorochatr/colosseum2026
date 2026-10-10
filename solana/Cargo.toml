@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/snarkjs-bridge", "programs/compliance"]
+members = ["crates/snarkjs-bridge", "crates/compliance-interface", "programs/compliance"]
 
 [workspace.package]
 version = "0.1.0"
@@ -23,8 +23,12 @@ solana-keypair = "3.1"
 solana-signer = "3"
 solana-transaction = { version = "4.1", features = ["serde", "wincode"] }
 solana-message = "4.2"
+solana-account = "4.3"
 mirror-circuit = { path = "../mirror-pool/crates/mirror-circuit" }
 snarkjs-bridge = { path = "crates/snarkjs-bridge" }
+compliance-interface = { path = "crates/compliance-interface" }
+mirror-pool-program = { path = "../mirror-pool/programs/mirror-pool", features = ["no-entrypoint"] }
+solana-system-interface = { version = "3.0", features = ["bincode"] }
 
 [profile.release]
 overflow-checks = true

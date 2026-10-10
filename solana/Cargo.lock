@@ -718,18 +718,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "compliance-interface"
+version = "0.1.0"
+dependencies = [
+ "solana-program",
+]
+
+[[package]]
 name = "compliance-program"
 version = "0.1.0"
 dependencies = [
+ "compliance-interface",
  "groth16-solana",
  "hex",
  "litesvm",
+ "mirror-pool-program",
  "serde_json",
  "snarkjs-bridge",
+ "solana-account",
  "solana-keypair",
  "solana-message",
  "solana-program",
  "solana-signer",
+ "solana-system-interface",
  "solana-transaction",
 ]
 
@@ -1569,6 +1580,16 @@ dependencies = [
  "solana-keccak-hasher",
  "solana-poseidon",
  "thiserror 2.0.19",
+]
+
+[[package]]
+name = "mirror-pool-program"
+version = "0.1.0"
+dependencies = [
+ "groth16-solana",
+ "mirror-core",
+ "solana-program",
+ "solana-system-interface",
 ]
 
 [[package]]

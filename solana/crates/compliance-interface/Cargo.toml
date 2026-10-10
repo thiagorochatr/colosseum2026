@@ -1,0 +1,10 @@
+[package]
+name = "compliance-interface"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Account layouts, seeds and instruction tags shared by the compliance program and the pools that consume its clearances"
+
+[dependencies]
+solana-program.workspace = true

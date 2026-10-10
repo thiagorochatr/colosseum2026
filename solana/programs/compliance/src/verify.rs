@@ -54,7 +54,7 @@ impl ProofRequest {
 
 /// Big-endian `x < p`. A non-canonical input would alias a canonical one, so
 /// it is refused before it reaches the verifier.
-fn is_canonical(x: &[u8; 32]) -> bool {
+pub fn is_canonical(x: &[u8; 32]) -> bool {
     x < &MODULUS_BE
 }
 

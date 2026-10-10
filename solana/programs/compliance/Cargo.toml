@@ -12,6 +12,8 @@ crate-type = ["cdylib", "lib"]
 [dependencies]
 solana-program.workspace = true
 groth16-solana.workspace = true
+compliance-interface.workspace = true
+solana-system-interface.workspace = true
 
 [features]
 no-entrypoint = []
@@ -25,6 +27,9 @@ solana-transaction.workspace = true
 solana-message.workspace = true
 serde_json.workspace = true
 hex.workspace = true
+solana-account.workspace = true
+mirror-pool-program.workspace = true
+solana-system-interface.workspace = true
 
 [lints.rust.unexpected_cfgs]
 level = "warn"
