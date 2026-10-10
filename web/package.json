@@ -17,5 +17,8 @@
     "@vitejs/plugin-react": "6.1.2",
     "vite": "8.3.4",
     "vite-plugin-node-polyfills": "0.28.0"
+  },
+  "optionalDependencies": {
+    "@rolldown/binding-linux-x64-gnu": "1.2.13"
   }
 }
