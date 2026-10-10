@@ -75,7 +75,7 @@ The circuit has no outputs. circom orders public inputs by their declaration ord
 
 The circuit treats `binding` as opaque. Each chain computes it from the action it executes, so one verifying key serves both chains.
 
-Size estimate: 42 Poseidon permutations, which is 40 `H2`, one `H3` and one `H1`. That is roughly 10k non-linear constraints. That fits a `2^14` powers-of-tau file.
+Size estimate: 42 Poseidon permutations, which is 40 `H2`, one `H3` and one `H1`. The compiled circuit, built with `--O2`, has 10,175 constraints, all non-linear. That fits a `2^14` powers-of-tau file.
 
 **Setup:**
 - **Phase 1:** a published perpetual powers-of-tau file.

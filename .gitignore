@@ -14,6 +14,7 @@ cache/
 broadcast/
 
 # Proving artefacts are regenerated or published on purpose, never by accident
+circuits/build/
 *.ptau
 *.zkey
 *_js/

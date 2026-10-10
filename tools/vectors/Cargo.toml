@@ -1,0 +1,14 @@
+[package]
+name = "vectors"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+description = "Test vectors for the withdraw circuit, computed with mirror-core, the reference implementation"
+
+# Standalone: not a member of mirror-pool's workspace, so the imported tree stays untouched.
+[workspace]
+
+[dependencies]
+mirror-core = { path = "../../mirror-pool/crates/mirror-core" }
+serde_json = "1"

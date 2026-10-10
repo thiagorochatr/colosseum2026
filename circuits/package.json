@@ -1,0 +1,16 @@
+{
+  "name": "withdraw-circuit",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "sh scripts/build.sh",
+    "setup:dev": "sh scripts/setup-dev.sh",
+    "vectors": "cargo run -q --release --manifest-path ../tools/vectors/Cargo.toml > test/vectors.json",
+    "test": "node --test --test-reporter=spec test/*.test.mjs"
+  },
+  "devDependencies": {
+    "circomlib": "2.0.5",
+    "snarkjs": "0.7.6"
+  }
+}
