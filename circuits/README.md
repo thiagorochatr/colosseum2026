@@ -47,6 +47,6 @@ Each rejection must fail at the specific constraint that should catch it, not me
 
 ## Keys
 
-- **Final key:** produced by the ceremony in [`docs/CEREMONY.md`](../docs/CEREMONY.md). `ceremony/vk.json` is committed. The proving key, `withdraw_final.zkey`, is about 6 MB and is published separately, with its sha256 in the ceremony document.
+- **Final key:** produced by the ceremony in [`docs/CEREMONY.md`](../docs/CEREMONY.md). `ceremony/vk.json` is committed. The proving key, `withdraw_final.zkey`, is about 6 MB and is published in the [ceremony-v1 release](https://github.com/thiagorochatr/colosseum2026/releases/tag/ceremony-v1), with its sha256 in the ceremony document.
 - **Regenerating the verifiers:** `npm run verifiers` regenerates the Solidity verifier, the Solana key module and every fixture from the final key.
 - **Development key:** `npm run setup:dev` makes a key from one local contribution, for testing only. The tests use the final key when it is present.
