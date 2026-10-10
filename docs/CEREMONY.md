@@ -39,11 +39,16 @@ When this was written, mainnet was near slot 455,087,000. The slot was expected 
 | 1 | Thiago Rocha | *pending* |
 | | Beacon | *pending* |
 
-### A discarded first attempt
+### Two discarded attempts
 
-The first run of `contribute.sh` passed the entropy to snarkjs as a command-line argument, through `npx`. npm 12 prints the full command line, so the entropy appeared on screen. snarkjs mixes 64 bytes of its own OS randomness into every contribution, and those were never shown, so the printed text alone does not reveal that contribution's secret. It was discarded anyway, because the script promises the entropy is never printed.
+Both were the script's fault, not the contributor's, and both printed the entropy on the contributor's screen:
 
-That key, sha256 `bee6056ca7dfd1c294e215b8a12bb6962b6b2c0bbfdf14b96ea8a3de2c717cea`, is not part of the chain. The script now runs snarkjs directly and passes the entropy on stdin, so it is neither printed nor visible as a process argument. The real contribution was made after this fix and before the beacon slot.
+1. The first passed the entropy as a command-line argument through `npx`. npm 12 prints the full command line. Discarded key sha256: `bee6056ca7dfd1c294e215b8a12bb6962b6b2c0bbfdf14b96ea8a3de2c717cea`.
+2. The second piped the entropy into snarkjs's interactive prompt. That prompt echoes its input when the output is a terminal. The script's test captured the output instead of using a terminal, so it missed the echo. Discarded key sha256: `555e216bbb21ecc1dc928185121a9ee0bf12b9de5c754f13a1c95c3dc965c6ee`.
+
+snarkjs mixes 64 bytes of its own OS randomness into every contribution, and those were never shown, so the printed text alone does not reveal either discarded secret. Both were discarded anyway, because the script promises the entropy is never printed. Neither key is part of the chain.
+
+The script now calls snarkjs's `zKey.contribute` API from `contribute.mjs`, with the entropy read from stdin into memory. It never passes through a command line, an environment variable or a prompt, and any log line containing it is refused. It was tested inside a pseudo-terminal, where the same test does catch the old prompt's echo. The real contribution was made after this fix and before the beacon slot.
 
 ### Trust model, stated plainly
 
