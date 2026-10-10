@@ -10,6 +10,8 @@ A user proves that their deposit belongs to a **clean set** without revealing wh
 - **Tempo:** a private stablecoin pool whose clean set is derived on-chain from the token issuer's own TIP-403 policy. A depositor who is blocklisted after depositing falls out of the set and cannot withdraw.
 - **Solana:** a compliance program that verifies the proof and records a clearance any program can check. mirror-pool is the reference pool.
 
+**Try it:** [colosseum2026.vercel.app](https://colosseum2026.vercel.app). It runs on Tempo's Moderato testnet and Solana devnet, with a throwaway test wallet in the browser. Deposit, prove in the browser and withdraw to a fresh address, or play the issuer or the curator and block a depositor.
+
 Work in progress.
 
 ## Layout
@@ -23,6 +25,8 @@ Work in progress.
 | `tools/vectors/` | Test vectors for the circuit, computed with `mirror-core`. |
 | `solana/` | The compliance program, the compliant pool around mirror-pool, the client and curator CLI. Live on devnet. |
 | `sdk/` | Trees, circuit inputs, proving, and each chain's binding and proof layout. |
+| `web/` | The app: one tab per chain. |
+| `api/` | The demo service as Vercel functions: faucet, relayer, issuer and curator, holding the test-network keys. |
 | `tempo/` | The private stablecoin pool, its tests, the relayer and the end-to-end flow. Live on Moderato. |
 
 ## Prior work
