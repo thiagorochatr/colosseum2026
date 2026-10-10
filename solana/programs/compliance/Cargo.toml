@@ -1,0 +1,34 @@
+[package]
+name = "compliance-program"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Verifies withdraw proofs against a pool root and a curator's clean root, and records clearances"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+solana-program.workspace = true
+groth16-solana.workspace = true
+
+[features]
+no-entrypoint = []
+
+[dev-dependencies]
+snarkjs-bridge.workspace = true
+litesvm.workspace = true
+solana-keypair.workspace = true
+solana-signer.workspace = true
+solana-transaction.workspace = true
+solana-message.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+
+[lints.rust.unexpected_cfgs]
+level = "warn"
+check-cfg = [
+    'cfg(target_os, values("solana"))',
+    'cfg(feature, values("custom-heap", "custom-panic"))',
+]
