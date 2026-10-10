@@ -3,6 +3,7 @@
   "private": true,
   "license": "MIT",
   "dependencies": {
-    "poseidon-solidity": "0.0.5"
+    "poseidon-solidity": "0.0.5",
+    "viem": "^2.57.4"
   }
 }

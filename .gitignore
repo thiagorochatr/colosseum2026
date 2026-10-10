@@ -33,3 +33,9 @@ id.json
 .idea/
 .vscode/
 .claude/
+
+# Test-network demo keys, generated locally
+tempo/.demo/
+
+# Local Tempo node deployments are throwaway
+tempo/deployments/31337*.json
