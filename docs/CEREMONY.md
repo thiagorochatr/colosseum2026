@@ -39,6 +39,12 @@ When this was written, mainnet was near slot 455,087,000. The slot was expected 
 | 1 | Thiago Rocha | *pending* |
 | | Beacon | *pending* |
 
+### A discarded first attempt
+
+The first run of `contribute.sh` passed the entropy to snarkjs as a command-line argument, through `npx`. npm 12 prints the full command line, so the entropy appeared on screen. snarkjs mixes 64 bytes of its own OS randomness into every contribution, and those were never shown, so the printed text alone does not reveal that contribution's secret. It was discarded anyway, because the script promises the entropy is never printed.
+
+That key, sha256 `bee6056ca7dfd1c294e215b8a12bb6962b6b2c0bbfdf14b96ea8a3de2c717cea`, is not part of the chain. The script now runs snarkjs directly and passes the entropy on stdin, so it is neither printed nor visible as a process argument. The real contribution was made after this fix and before the beacon slot.
+
 ### Trust model, stated plainly
 
 Phase 2 has a single human contributor. The final key is sound if that contribution's entropy was destroyed, which only the contributor can attest to. The beacon does not change that: it stops the last contributor from choosing the result, but it does not replace an honest contribution. This is acceptable for test networks and is not enough for real value.
