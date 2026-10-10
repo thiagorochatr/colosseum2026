@@ -1,0 +1,8 @@
+{
+  "chainId": 42431,
+  "denomination": 100000000,
+  "deployBlock": 38935534,
+  "pool": "0x7228B24c607151E74DBCb4Ad818B87cd993a64E9",
+  "token": "0x20C0000000000000000000002Bc6afccdA61E264",
+  "verifier": "0x11A0D22C805E50ED833343cA2802173bd8CB795a"
+}

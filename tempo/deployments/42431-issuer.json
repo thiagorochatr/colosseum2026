@@ -1,0 +1,14 @@
+{
+  "network": "moderato",
+  "token": "0x20C0000000000000000000002Bc6afccdA61E264",
+  "policy": "1253146",
+  "issuer": "0x383Ba352BdC80996C2B4b1Aa1D67EEaB02C68BFC",
+  "users": {
+    "alice": "0x179bD96Ad12bCb4d6255E97A8dcc4A0F01083fD8",
+    "bob": "0xbFDC3E8BfFc458A17aC8c0af0a22E18E0d198040",
+    "carol": "0x2aDC429F4dBA075f739a146B2f6663CaB30F81C8",
+    "relayer": "0x1625f9D780A284D50581fb68B7f8C9bF7e10AF86"
+  },
+  "createTokenTx": "0x185812350643c36f8d0c1087d5b25ca4b238428bd5bafdfdc76a22476df7f670",
+  "createPolicyTx": "0x18e303e87f455b153f54cf2f06bc20b8a0239bac970a60a4aa86a69068f3b794"
+}

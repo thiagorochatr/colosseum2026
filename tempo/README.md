@@ -1,6 +1,6 @@
 # Tempo contracts
 
-Foundry project for the Tempo side: the Groth16 verifier now, the private stablecoin pool next. See [`docs/SPEC.md`](../docs/SPEC.md) section 7.
+Foundry project for the Tempo side: a private stablecoin pool whose clean set is derived from the token issuer's TIP-403 policy. See [`docs/SPEC.md`](../docs/SPEC.md) section 7.
 
 ## Setup
 
@@ -20,6 +20,11 @@ forge test --network tempo
 | `test/Verifier.t.sol` | Every valid proof verifies. Changed inputs, swapped input order, another note's inputs, swapped G2 coordinates and non-canonical inputs all fail. |
 | `test/Poseidon.t.sol` | `poseidon-solidity` against the circomlib vector, the zero ladder, and the pool and clean roots of the circuit's test vectors. |
 | `test/Tip403.t.sol` | TIP-20 token creation and the TIP-403 checks the pool relies on, including blacklist, whitelist and compound policies. |
+| `src/CompliantPool.sol` | The pool. Deposit, permissionless `exclude` and `reinclude` checked against the registry, and withdraw with a proof. |
+| `test/CompliantPool.t.sol` | 12 scenarios with real proofs from the final key, made through the SDK by `vm.ffi`. |
+| `script/Deploy.s.sol` | Deploys the verifier and a pool, and records the addresses. |
+| `e2e/` | The issuer's setup and the full flow on a real node. |
+| `relayer/relayer.mjs` | Submits withdrawals and pays the gas. The pool pays it the fee bound into the proof. |
 | `test/fixtures/proofs.json` | The circuit's proofs in Solidity calldata layout, from `circuits/scripts/solidity-fixtures.mjs`. |
 
 ## Measured
@@ -31,3 +36,52 @@ forge test --network tempo
 | Deploying the verifier, local Tempo node | about 2.43M |
 | Deploying the verifier, estimated on Moderato | about 2.45M |
 | One Merkle path, 20 Poseidon hashes | about 603k |
+| First deposit into a pool, many new storage slots | about 13.2M |
+| Later deposits | about 2.8M to 3.1M |
+| Withdraw | about 0.8M to 1.1M |
+| Block and exclude, one batch transaction | about 1.6M |
+
+## Live on Moderato
+
+Deployed on Tempo's public testnet, chain 42431, on 2026-10-10.
+
+| | Address |
+|---|---|
+| Pool | [`0x7228B24c607151E74DBCb4Ad818B87cd993a64E9`](https://explore.testnet.tempo.xyz/address/0x7228B24c607151E74DBCb4Ad818B87cd993a64E9) |
+| Verifier, from the ceremony's final key | [`0x11A0D22C805E50ED833343cA2802173bd8CB795a`](https://explore.testnet.tempo.xyz/address/0x11A0D22C805E50ED833343cA2802173bd8CB795a) |
+| Demo USD token, TIP-20 | [`0x20C0000000000000000000002Bc6afccdA61E264`](https://explore.testnet.tempo.xyz/address/0x20C0000000000000000000002Bc6afccdA61E264) |
+| Blacklist policy | `1253146`, administered by the issuer |
+
+`e2e/run.mjs` ran the whole flow there:
+
+| Step | Transaction | Gas |
+|---|---|---|
+| deposit by alice | [0xfd5ea9c1…](https://explore.testnet.tempo.xyz/tx/0xfd5ea9c182bec1c7101d9a463176a6f56b977dd998fc58545e1ba18ab551fb4b) | 13,200,071 |
+| deposit by bob | [0x7f1b5391…](https://explore.testnet.tempo.xyz/tx/0x7f1b539195116d71a4288a03543a664679e74408fa7f04efa4804f618f26f082) | 2,808,151 |
+| deposit by carol | [0xc6a0f072…](https://explore.testnet.tempo.xyz/tx/0xc6a0f07220c9196198468242db77551418f09a69a1c6992800d7c451104b115e) | 3,055,403 |
+| issuer blocks Bob and excludes his deposit, one batch transaction | [0xf0dc3cf0…](https://explore.testnet.tempo.xyz/tx/0xf0dc3cf03ba9da933fef3e697fef12746c114acc850fba22e1a1f0313c76fbb5) | 1,580,840 |
+| withdrawal of alice's note to a fresh address, via the relayer | [0xfd2355fb…](https://explore.testnet.tempo.xyz/tx/0xfd2355fb92eebd100aa3a1a34ff9aa4c67fd149de3b682322e18cb9d3ee2509e) | 1,064,745 |
+| withdrawal of carol's note to a fresh address, via the relayer | [0xd60c4be5…](https://explore.testnet.tempo.xyz/tx/0xd60c4be5003273ae16c20294a3dab0e13e3316d8f1cee53efacda062719ce0d6) | 812,481 |
+
+Read back from the chain afterwards:
+
+- **Bob's deposit:** his clean leaf is zero, and the clean epoch is 1.
+- **The pool:** it holds Bob's 100 dUSD, retained under the issuer's policy.
+- **Each fresh recipient:** received 99 dUSD and has sent no transaction.
+- **The issuer's batch:** a single type `0x76` Tempo transaction with two calls, to the TIP-403 registry and to the pool.
+
+The full record is `deployments/42431-e2e.json`.
+
+## Running it
+
+```sh
+# Local Tempo node
+anvil --network tempo
+NETWORK=local node e2e/setup-issuer.mjs
+POOL_TOKEN=<token> forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --private-key <anvil key 0> --broadcast
+NETWORK=local node e2e/run.mjs
+
+# Moderato: the same, with NETWORK=moderato and --account deployer
+```
+
+The flow needs `circuits/build/withdraw_js/withdraw.wasm` and `circuits/ceremony/withdraw_final.zkey`, both in the [ceremony-v1 release](https://github.com/thiagorochatr/colosseum2026/releases/tag/ceremony-v1).

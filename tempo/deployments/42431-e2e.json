@@ -1,0 +1,57 @@
+{
+  "network": "moderato",
+  "chainId": 42431,
+  "pool": "0x7228B24c607151E74DBCb4Ad818B87cd993a64E9",
+  "token": "0x20C0000000000000000000002Bc6afccdA61E264",
+  "policy": "1253146",
+  "relayer": "0x1625f9D780A284D50581fb68B7f8C9bF7e10AF86",
+  "steps": [
+    {
+      "step": "deposit by alice",
+      "tx": "0xfd5ea9c182bec1c7101d9a463176a6f56b977dd998fc58545e1ba18ab551fb4b",
+      "link": "https://explore.testnet.tempo.xyz/tx/0xfd5ea9c182bec1c7101d9a463176a6f56b977dd998fc58545e1ba18ab551fb4b",
+      "gasUsed": "13200071",
+      "index": 0
+    },
+    {
+      "step": "deposit by bob",
+      "tx": "0x7f1b539195116d71a4288a03543a664679e74408fa7f04efa4804f618f26f082",
+      "link": "https://explore.testnet.tempo.xyz/tx/0x7f1b539195116d71a4288a03543a664679e74408fa7f04efa4804f618f26f082",
+      "gasUsed": "2808151",
+      "index": 1
+    },
+    {
+      "step": "deposit by carol",
+      "tx": "0xc6a0f07220c9196198468242db77551418f09a69a1c6992800d7c451104b115e",
+      "link": "https://explore.testnet.tempo.xyz/tx/0xc6a0f07220c9196198468242db77551418f09a69a1c6992800d7c451104b115e",
+      "gasUsed": "3055403",
+      "index": 2
+    },
+    {
+      "step": "issuer blocks Bob and excludes his deposit, one batch transaction",
+      "tx": "0xf0dc3cf03ba9da933fef3e697fef12746c114acc850fba22e1a1f0313c76fbb5",
+      "link": "https://explore.testnet.tempo.xyz/tx/0xf0dc3cf03ba9da933fef3e697fef12746c114acc850fba22e1a1f0313c76fbb5",
+      "gasUsed": "1580840"
+    },
+    {
+      "step": "withdrawal of alice's note to a fresh address, via the relayer",
+      "tx": "0xfd2355fb92eebd100aa3a1a34ff9aa4c67fd149de3b682322e18cb9d3ee2509e",
+      "link": "https://explore.testnet.tempo.xyz/tx/0xfd2355fb92eebd100aa3a1a34ff9aa4c67fd149de3b682322e18cb9d3ee2509e",
+      "gasUsed": "1064745",
+      "recipient": "0x1ae8B9064600728A7A55a608a84B40ffC06eb776",
+      "received": "99000000"
+    },
+    {
+      "step": "withdrawal of carol's note to a fresh address, via the relayer",
+      "tx": "0xd60c4be5003273ae16c20294a3dab0e13e3316d8f1cee53efacda062719ce0d6",
+      "link": "https://explore.testnet.tempo.xyz/tx/0xd60c4be5003273ae16c20294a3dab0e13e3316d8f1cee53efacda062719ce0d6",
+      "gasUsed": "812481",
+      "recipient": "0x060F57f43c242931662fa33975B21126B7e3841A",
+      "received": "99000000"
+    }
+  ],
+  "excludedNoteRefused": true,
+  "finalPoolRoot": "847374783164266629571903194180020698518732216391023500227467942153710386310",
+  "finalCleanRoot": "1300300574211471795531667318935026432917653350364842354763735099887710169471",
+  "cleanEpoch": "1"
+}
