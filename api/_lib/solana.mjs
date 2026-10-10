@@ -64,18 +64,18 @@ async function settle(allowBelowFloor = false, known = []) {
   return { tx: await send([ix], [r]), settled: pending.length };
 }
 
-/** Publishes the clean root of the whole pool under `blocklist`, with the set in a memo. */
+/**
+ * Publishes the clean root of the whole pool under `blocklist`, in one
+ * transaction with the policy's hash and the memo carrying the policy document.
+ */
 async function publish(blocklist, { revoke = false } = {}) {
   const { leaves, depositors } = await S.syncPool(connection, program, pool);
-  const blocked = new Set(blocklist);
+  const policy = S.policyDocument(blocklist);
+  const blocked = new Set(policy.blocklist);
   const excluded = depositors.map((d, i) => (blocked.has(d) ? i : -1)).filter((i) => i >= 0);
   const cleanRoot = (await cleanTree(leaves, excluded)).root();
   const c = curator();
-  const ixs = [
-    ...(revoke ? [S.instructions.revoke(compliance, c.publicKey)] : []),
-    S.instructions.publishRoot(compliance, c.publicKey, cleanRoot),
-    S.cleanSetMemo({ pool, depositCount: leaves.length, excluded, blocklist: [...blocked], cleanRoot }),
-  ];
+  const ixs = S.publishInstructions({ compliance, curator: c.publicKey, pool, depositCount: leaves.length, excluded, blocklist: policy.blocklist, cleanRoot, revoke });
   return { tx: await send(ixs, [c]), depositCount: leaves.length, excluded, revoked: revoke };
 }
 

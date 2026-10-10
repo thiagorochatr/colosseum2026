@@ -331,3 +331,33 @@ fn the_ring_keeps_the_last_32_roots() {
     // One more pushes it out.
     assert!(env2.verify_clearance(&req).unwrap_err().contains(&code(9)));
 }
+
+#[test]
+fn the_authority_can_replace_the_policy_hash_and_nobody_else_can() {
+    let (mut env, _) = ready();
+    let at = compliance_interface::curator::at::POLICY_HASH;
+    let read = |env: &Env| env.svm.get_account(&env.curator()).unwrap().data[at..at + 32].to_vec();
+    assert_eq!(read(&env), vec![9u8; 32], "the hash set at creation");
+
+    let ix = env.curator_ix(tag::UPDATE_POLICY, &[4u8; 32], &env.authority.pubkey());
+    let a = env.authority.insecure_clone();
+    env.send(ix, &[&a]).unwrap();
+    assert_eq!(read(&env), vec![4u8; 32]);
+
+    let stranger = Keypair::new();
+    env.svm.airdrop(&stranger.pubkey(), 1_000_000_000).unwrap();
+    let ix = env.curator_ix(tag::UPDATE_POLICY, &[5u8; 32], &stranger.pubkey());
+    assert!(env.send(ix, &[&stranger]).unwrap_err().contains(&code(7)));
+    let ix = env.curator_ix(tag::UPDATE_POLICY, &[5u8; 31], &env.authority.pubkey());
+    assert!(env.send(ix, &[&a]).unwrap_err().contains(&code(1)));
+    assert_eq!(read(&env), vec![4u8; 32], "neither attempt changed it");
+}
+
+#[test]
+fn updating_the_policy_leaves_roots_and_epoch_alone() {
+    let (mut env, req) = ready();
+    let ix = env.curator_ix(tag::UPDATE_POLICY, &[4u8; 32], &env.authority.pubkey());
+    let a = env.authority.insecure_clone();
+    env.send(ix, &[&a]).unwrap();
+    env.verify_clearance(&req).unwrap();
+}

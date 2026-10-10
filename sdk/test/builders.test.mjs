@@ -50,16 +50,36 @@ test("the Tempo batch builders encode approve+deposit and block+exclude", () => 
 test("the Solana PDAs are the ones already on devnet", () => {
   const d = json("solana/deployments/devnet.json");
   const e = json("solana/deployments/devnet-e2e.json");
-  const program = new PublicKey(d.poolProgram);
-  assert.equal(solana.poolAddress(program, BigInt(d.denomination)).toBase58(), e.pool);
-  const curator = json("solana/deployments/devnet-curator.json");
-  assert.equal(curator.pool, e.pool);
+  assert.equal(solana.poolAddress(new PublicKey(d.poolProgram), BigInt(d.denomination)).toBase58(), e.pool);
 });
 
-test("the policy hash is the one the curator published", () => {
-  const policy = json("solana/deployments/devnet-policy.json");
-  const curator = json("solana/deployments/devnet-curator.json");
-  assert.equal(Buffer.from(solana.policyHash(policy)).toString("hex"), curator.policy_hash);
+test("the policy document is canonical: sorted, deduplicated, fixed key order", () => {
+  const a = solana.policyDocument(["b", "a", "b"]);
+  assert.deepEqual(a, { version: 1, rule: solana.POLICY_RULE, blocklist: ["a", "b"] });
+  assert.deepEqual(solana.policyHash(a), solana.policyHash(solana.policyDocument(["a", "b"])));
+  // The genesis policy on devnet is already in canonical form.
+  const genesis = json("solana/deployments/devnet-policy.json");
+  assert.deepEqual(genesis, solana.policyDocument(genesis.blocklist));
+});
+
+test("a curator memo is accepted only with a held root and the curator's policy hash", () => {
+  const compliance = new PublicKey("HHapM3yA1JkhFJ1msTc7n3CEQ7PMZvxHMvQz7G7orQ2j");
+  const curator = new PublicKey("AdUihuLoEVQyyirSHLrrLMRvctXeFihqTQyGyV1sv5fA");
+  const pool = new PublicKey("4RwTZq6ucSEDWEQZ6RSfa1ruhqEayS4QsF6LVPA7yvGP");
+  const blocklist = ["9vZ1Lv", "E73QdV"];
+  const ixs = solana.publishInstructions({ compliance, curator, pool, depositCount: 4, excluded: [1, 3], blocklist, cleanRoot: 77n, revoke: true });
+  assert.deepEqual(ixs.map((i) => i.data[0]), [3, 5, 2, ixs[3].data[0]], "revoke, update policy, publish root, then the memo");
+  const memo = new TextDecoder().decode(ixs[3].data);
+  const hash = Buffer.from(solana.policyHash(solana.policyDocument(blocklist))).toString("hex");
+  const state = { roots: [77n], policyHash: `0x${hash}` };
+
+  const set = solana.acceptMemo(memo, pool, state);
+  assert.deepEqual({ n: set.depositCount, x: set.excluded, b: set.blocklist, r: set.cleanRoot }, { n: 4, x: [1, 3], b: blocklist, r: 77n });
+  assert.equal(solana.acceptMemo(memo, pool, { ...state, policyHash: `0x${"00".repeat(32)}` }), null, "another policy hash");
+  assert.equal(solana.acceptMemo(memo, pool, { ...state, roots: [78n] }), null, "a root the curator no longer holds");
+  assert.equal(solana.acceptMemo(memo, PublicKey.default, state), null, "another pool");
+  const v1 = JSON.stringify({ v: 1, pool: pool.toBase58(), n: 4, x: [1, 3], b: blocklist, r: "4d" });
+  assert.equal(solana.acceptMemo(v1, pool, state), null, "the old memo, with no policy document");
 });
 
 test("the Solana instruction data have the programs' exact lengths", () => {

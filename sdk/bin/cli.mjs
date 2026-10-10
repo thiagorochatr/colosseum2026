@@ -106,14 +106,14 @@ async function solanaCtx(network) {
   if (!net) throw new Error(`unknown Solana network ${network}`);
   const web3 = await import("@solana/web3.js");
   const dep = json(`${ROOT}solana/deployments/${network}.json`);
-  const curatorFile = `${ROOT}solana/deployments/${network}-curator.json`;
-  return {
-    net, web3, dep,
-    connection: new web3.Connection(net.rpc, "confirmed"),
-    program: new web3.PublicKey(dep.poolProgram),
-    compliance: new web3.PublicKey(dep.complianceProgram),
-    curator: existsSync(curatorFile) ? json(curatorFile) : null,
-  };
+  const connection = new web3.Connection(net.rpc, "confirmed");
+  const program = new web3.PublicKey(dep.poolProgram);
+  const compliance = new web3.PublicKey(dep.complianceProgram);
+  const curatorAuthority = new web3.PublicKey(dep.curatorAuthority);
+  const pool = S.poolAddress(program, BigInt(dep.denomination));
+  // The clean set in force, read from the curator's memo and checked against its account.
+  const set = await S.readCleanSet(connection, compliance, curatorAuthority, pool);
+  return { net, web3, dep, connection, program, compliance, curatorAuthority, set };
 }
 
 const keypairFile = (web3, path) => web3.Keypair.fromSecretKey(Uint8Array.from(json(path ?? `${homedir()}/.config/solana/id.json`)));
@@ -138,10 +138,10 @@ const solana = {
   async status(note) {
     const ctx = await solanaCtx(note.network);
     const { pool, synced, index } = await solanaFind(ctx, note);
-    const excluded = ctx.curator?.pool === note.pool ? ctx.curator.excluded : null;
+    const excluded = ctx.set?.excluded ?? null;
     const spend = S.spendAddress(ctx.program, pool, S.fieldBytes(await nullifierOf(note)));
     const spent = (await ctx.connection.getAccountInfo(spend)) !== null;
-    const curatedUpTo = ctx.curator?.deposit_count ?? 0;
+    const curatedUpTo = ctx.set?.depositCount ?? 0;
     return {
       deposited: index >= 0,
       index,
@@ -153,23 +153,22 @@ const solana = {
   },
   async withdraw(note, opts) {
     const ctx = await solanaCtx(note.network);
-    if (!ctx.curator) throw new Error("no published clean set for this network; run the curator first");
+    if (!ctx.set) throw new Error("the curator has no clean set in force for this pool; run the curator first");
     const relay = keypairFile(ctx.web3, opts["relay-keypair"]);
     const fee = BigInt(opts.fee ?? 1_000_000);
     const { pool, synced, index } = await solanaFind(ctx, note);
     if (index < 0) throw new Error("this note was never deposited");
-    if (index >= ctx.curator.deposit_count) throw new Error("the curator has not published a clean root covering this deposit yet");
-    if (ctx.curator.excluded.includes(index)) throw new Error("this note is outside the curator's clean set");
+    if (index >= ctx.set.depositCount) throw new Error("the curator has not published a clean root covering this deposit yet");
+    if (ctx.set.excluded.includes(index)) throw new Error("this note is outside the curator's clean set");
     // Prove against the pool as the curator saw it, so the clean root is the published one.
-    const leaves = synced.leaves.slice(0, ctx.curator.deposit_count);
+    const leaves = synced.leaves.slice(0, ctx.set.depositCount);
     const beneficiary = new ctx.web3.PublicKey(opts.to);
     const binding = S.actionBinding({ beneficiary: beneficiary.toBytes(), relay: relay.publicKey.toBytes(), relayFee: fee });
-    const { proof, input } = await prove({ note: circuitNote(note), index, poolLeaves: leaves, excluded: ctx.curator.excluded, binding }, proving);
+    const { proof, input } = await prove({ note: circuitNote(note), index, poolLeaves: leaves, excluded: ctx.set.excluded, binding }, proving);
     const inputs = [input.poolRoot, input.cleanRoot, input.nullifierHash, input.binding];
     const nullifier = S.fieldBytes(await nullifierOf(note));
-    const curatorAuthority = new ctx.web3.PublicKey(ctx.curator.curator);
     const sig = await solanaSend(ctx, [
-      S.instructions.verifyClearance(ctx.compliance, relay.publicKey, curatorAuthority, pool, S.toSolana(proof), inputs),
+      S.instructions.verifyClearance(ctx.compliance, relay.publicKey, ctx.curatorAuthority, pool, S.toSolana(proof), inputs),
       S.instructions.submitClearedSpend(ctx.program, ctx.compliance, relay.publicKey, pool, nullifier, beneficiary, fee),
     ], [relay]);
     return { tx: link(ctx.net, sig), beneficiary: opts.to, pending: "settles with the next batch: compliance settle" };

@@ -29,6 +29,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
         tag::PUBLISH_ROOT => publish_root(program_id, accounts, rest),
         tag::REVOKE => revoke(program_id, accounts, rest),
         tag::VERIFY_CLEARANCE => verify_clearance(program_id, accounts, rest),
+        tag::UPDATE_POLICY => update_policy(program_id, accounts, rest),
         _ => Err(ComplianceError::UnknownInstruction.into()),
     }
 }
@@ -168,6 +169,23 @@ fn publish_root(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> P
     d[r..r + 32].copy_from_slice(&root);
     d[e..e + 8].copy_from_slice(&epoch.to_le_bytes());
     d[curator::at::POS..curator::at::POS + 4].copy_from_slice(&(next as u32).to_le_bytes());
+    Ok(())
+}
+
+/// Accounts: authority (signer), curator (writable). Data: policy_hash (32).
+///
+/// The policy a curator applies can change, for example when a depositor is
+/// blocked. The hash on chain must keep matching the policy document the
+/// curator publishes, so it changes with it, signed by the same authority.
+fn update_policy(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+    let iter = &mut accounts.iter();
+    let authority = next_account_info(iter)?;
+    let account = next_account_info(iter)?;
+    let policy_hash = array32(data)?;
+    check_curator(program_id, account)?;
+    check_authority(account, authority)?;
+    let mut d = account.try_borrow_mut_data()?;
+    d[curator::at::POLICY_HASH..curator::at::POLICY_HASH + 32].copy_from_slice(&policy_hash);
     Ok(())
 }
 

@@ -28,6 +28,9 @@ pub mod tag {
     /// Verifies a proof against a pool and a curator, and writes a clearance.
     /// Data: a (64), b (128), c (64), poolRoot, cleanRoot, nullifierHash, binding.
     pub const VERIFY_CLEARANCE: u8 = 4;
+    /// Replaces the curator's policy hash, when the policy it applies changes.
+    /// Data: policy_hash (32).
+    pub const UPDATE_POLICY: u8 = 5;
 }
 
 /// A curator: who publishes clean roots for which policy.

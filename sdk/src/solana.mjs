@@ -121,6 +121,8 @@ export const instructions = {
     ix(compliance, [ro(authority, true), w(curatorAddress(compliance, authority))], [Uint8Array.of(2), be32(root)]),
   revoke: (compliance, authority) =>
     ix(compliance, [ro(authority, true), w(curatorAddress(compliance, authority))], [Uint8Array.of(3)]),
+  updatePolicy: (compliance, authority, policyHash) =>
+    ix(compliance, [ro(authority, true), w(curatorAddress(compliance, authority))], [Uint8Array.of(5), bytes32(policyHash)]),
   /** proof in groth16-solana layout; inputs: [poolRoot, cleanRoot, nullifierHash, binding] */
   verifyClearance: (compliance, payer, curatorAuthority, pool, proof, inputs) =>
     ix(
@@ -230,24 +232,45 @@ export async function syncPool(connection, program, pool) {
 
 // ------------------------------------------------- the curator's clean set, on-chain
 //
-// The curator account holds only roots. The clean set behind the latest root
-// travels in a Memo instruction of the same transaction that publishes it, so
-// any client can rebuild the clean tree with nothing but an RPC endpoint, and
-// checks the root it rebuilds against the curator account.
+// The curator account holds roots and the hash of the policy it applies. The
+// policy document and the clean set behind the latest root travel in a Memo
+// instruction of the same transaction that publishes them, so any client can
+// rebuild the clean tree with nothing but an RPC endpoint. A client accepts a
+// memo only if its root is held in the curator's current epoch AND the sha256
+// of its policy document is the hash stored in the curator account.
 
 export const MEMO_PROGRAM = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
+export const POLICY_RULE = "exclude every deposit whose depositor is on the blocklist";
 
-/** { pool, depositCount, excluded, blocklist, cleanRoot } as a Memo instruction. */
-export function cleanSetMemo({ pool, depositCount, excluded, blocklist, cleanRoot }) {
-  const body = { v: 1, pool: pool.toBase58?.() ?? pool, n: Number(depositCount), x: excluded, b: blocklist, r: BigInt(cleanRoot).toString(16) };
-  return new TransactionInstruction({ programId: MEMO_PROGRAM, keys: [], data: Buffer.from(JSON.stringify(body)) });
+/** The canonical policy document: fixed key order, sorted and deduplicated blocklist. */
+export function policyDocument(blocklist) {
+  return { version: 1, rule: POLICY_RULE, blocklist: [...new Set(blocklist)].sort() };
 }
 
-/** The curator account's epoch and the roots of its current epoch. */
+/**
+ * Everything one publication writes, in one transaction: an optional new
+ * epoch, the policy's hash, the clean root, and the memo carrying the policy
+ * document and the clean set.
+ */
+export function publishInstructions({ compliance, curator, pool, depositCount, excluded, blocklist, cleanRoot, revoke = false }) {
+  const policy = policyDocument(blocklist);
+  const body = { v: 2, pool: pool.toBase58(), n: Number(depositCount), x: excluded, r: BigInt(cleanRoot).toString(16), policy };
+  return [
+    ...(revoke ? [instructions.revoke(compliance, curator)] : []),
+    instructions.updatePolicy(compliance, curator, policyHash(policy)),
+    instructions.publishRoot(compliance, curator, cleanRoot),
+    new TransactionInstruction({ programId: MEMO_PROGRAM, keys: [], data: Buffer.from(JSON.stringify(body)) }),
+  ];
+}
+
+/** The curator account's epoch, policy hash and the roots of its current epoch. */
 export async function curatorState(connection, compliance, authority) {
   const info = await withBackoff(() => connection.getAccountInfo(curatorAddress(compliance, authority), "confirmed"));
   if (!info) return null;
-  const d = Uint8Array.from(info.data);
+  return parseCuratorAccount(Uint8Array.from(info.data));
+}
+
+export function parseCuratorAccount(d) {
   const epoch = readU64(d, 2);
   const roots = [];
   for (let i = 0; i < 32; i++) {
@@ -258,9 +281,25 @@ export async function curatorState(connection, compliance, authority) {
 }
 
 /**
- * The latest clean set the curator published for `pool`, read from its memo
- * and accepted only if its root is one the curator holds in its current epoch.
+ * A memo body as the clean set it describes, or null if it does not describe
+ * `pool` under this curator state: wrong version, a root the curator does not
+ * hold now, or a policy document whose hash is not the curator's.
  */
+export function acceptMemo(text, pool, state) {
+  let body;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (body?.v !== 2 || body.pool !== pool.toBase58() || !body.policy) return null;
+  const cleanRoot = BigInt(`0x${body.r}`);
+  if (!state.roots.includes(cleanRoot)) return null;
+  if (bytesToHex(policyHash(body.policy)) !== state.policyHash) return null;
+  return { depositCount: body.n, excluded: body.x, policy: body.policy, blocklist: body.policy.blocklist, cleanRoot };
+}
+
+/** The latest clean set the curator published for `pool` and still stands behind. */
 export async function readCleanSet(connection, compliance, authority, pool) {
   const state = await curatorState(connection, compliance, authority);
   if (!state) return null;
@@ -272,16 +311,8 @@ export async function readCleanSet(connection, compliance, authority, pool) {
     const keys = msg.staticAccountKeys ?? msg.accountKeys;
     for (const ci of msg.compiledInstructions ?? msg.instructions) {
       if (!keys[ci.programIdIndex].equals(MEMO_PROGRAM)) continue;
-      let body;
-      try {
-        body = JSON.parse(new TextDecoder().decode(Uint8Array.from(ci.data)));
-      } catch {
-        continue;
-      }
-      if (body.v !== 1 || body.pool !== pool.toBase58()) continue;
-      const cleanRoot = BigInt(`0x${body.r}`);
-      if (!state.roots.includes(cleanRoot)) continue; // revoked, or never published
-      return { depositCount: body.n, excluded: body.x, blocklist: body.b, cleanRoot, signature, epoch: state.epoch };
+      const set = acceptMemo(new TextDecoder().decode(Uint8Array.from(ci.data)), pool, state);
+      if (set) return { ...set, signature, epoch: state.epoch };
     }
   }
   return null;

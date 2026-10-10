@@ -161,6 +161,7 @@ A native program, in the same style as `mirror-pool`.
 - **`InitCurator { policy_hash }`**, signed by the authority.
 - **`PublishRoot { root }`**, signed by the authority. It pushes `root` tagged with the current epoch.
 - **`Revoke {}`**, signed by the authority. It increments the epoch, invalidating every earlier root.
+- **`UpdatePolicy { policy_hash }`**, signed by the authority. It replaces the policy hash when the policy changes, for example when a depositor is blocked. Roots and epoch are untouched.
 - **`VerifyClearance { proof, poolRoot, cleanRoot, nullifierHash, binding }`**:
   1. Checks the pool account:
      - it is owned by the configured `mirror-pool` program id;
@@ -192,30 +193,26 @@ A clearance is public evidence. Anyone, such as an offramp, a DEX or a transfer 
 
 ### 8.3 Curator, off-chain
 
-1. Rebuild the pool tree from the pool's transaction history, with the existing `mirror-pool` code.
-2. Take each deposit's depositor, which is the signer of `Deposit`.
-3. Apply the published policy to each depositor.
-4. Build the clean tree as a mask of the pool tree.
-5. Publish the root on-chain, plus this file:
+**The policy** is a canonical JSON document: `{"version": 1, "rule": "exclude every deposit whose depositor is on the blocklist", "blocklist": [...]}`, with the blocklist sorted and deduplicated. Its sha256 is the `policy_hash` the curator account holds. The genesis policy is `solana/deployments/devnet-policy.json`.
+
+**Each publication** rebuilds the pool from its transaction history, takes each deposit's depositor (the signer of `Deposit`), applies the policy, and builds the clean tree as a mask of the pool tree. One transaction then carries:
+
+1. `Revoke`, only when the policy removes someone, so no earlier root survives;
+2. `UpdatePolicy` with the policy's hash;
+3. `PublishRoot` with the clean root;
+4. a Memo instruction with the clean set and the policy document:
 
 ```json
-{
-  "version": 1,
-  "pool": "<base58>",
-  "curator": "<base58>",
-  "policy_hash": "<hex>",
-  "deposit_count": 0,
-  "excluded": [],
-  "clean_root": "<hex>"
-}
+{ "v": 2, "pool": "<base58>", "n": 10, "x": [1], "r": "<clean root, hex>",
+  "policy": { "version": 1, "rule": "...", "blocklist": ["<base58>"] } }
 ```
 
-A client rebuilds the clean tree from the pool tree and `excluded`, and must get `clean_root`.
+**A client accepts a memo** only if its root is held in the curator's current epoch and the sha256 of its policy document equals the hash in the curator account. It then rebuilds the clean tree from the pool tree and `x`, and must get `r`. Nothing about the clean set lives off-chain.
 
 ## 9. Clients
 
 - **Tempo:** the client rebuilds both trees from `Deposit`, `Excluded` and `Reincluded` events.
-- **Solana:** the client rebuilds the pool tree from history and the clean tree from the curator file.
+- **Solana:** the client rebuilds the pool tree from history and the clean tree from the curator's latest accepted memo.
 - **Proving:** snarkjs with the circuit's `wasm` and the final `zkey`, in the browser or in Node.
 - **Verifying key:** both verifiers are generated from one `vk.json`, and its sha256 is printed by both deploy scripts. Matching digests are the check that the two chains verify the same statement.
 

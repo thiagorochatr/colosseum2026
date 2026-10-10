@@ -14,6 +14,7 @@ import { randomBytes } from "node:crypto";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { FIELD, hasher } from "../../sdk/src/tree.mjs";
 import { prove, terminate } from "../../sdk/src/prove.mjs";
+import * as S from "../../sdk/src/solana.mjs";
 import { actionBinding, toSolana } from "../../sdk/src/solana.mjs";
 import {
   NETWORK, ROOT, PublicKey, Keypair, SystemProgram, be32, connection, demoKeypair, explorer, ixs, poolAddress,
@@ -55,7 +56,7 @@ if (!(await connection.getAccountInfo(pool))) {
   record("init pool", await send([ixs.initPool(poolProgram, funder.publicKey, denomination, 2)], [funder]));
 }
 writeDeployment("", { ...d, pool: pool.toBase58() });
-writeDeployment("policy", { version: 1, rule: "exclude every deposit whose depositor is on the blocklist", blocklist: [users.bob.publicKey.toBase58()] });
+writeDeployment("policy", S.policyDocument([users.bob.publicKey.toBase58()]));
 const created = await initCurator();
 if (!created.existed) steps.push({ step: "curator created", signature: created.sig, link: explorer(created.sig) });
 
@@ -75,6 +76,7 @@ writeFileSync(`${ROOT}.demo/${NETWORK}/notes.json`, JSON.stringify(notes, (_, v)
 // ------------------------------------------------- 2. the curator publishes
 const published = await publish();
 record(`curator publishes the clean root, excluding [${published.excluded}]`, published.sig);
+published.clean_root = published.cleanRoot.toString(16).padStart(64, "0");
 
 // -------------------------------------- 3. prove, clear and spend via the relay
 const synced = await syncPool(poolProgram, pool);

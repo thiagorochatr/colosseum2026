@@ -1,87 +1,91 @@
 // The curator, off-chain. See docs/SPEC.md section 8.3.
 //
-//   node curator.mjs init                    create the curator account, bound to the policy's hash
-//   node curator.mjs publish                 rebuild the pool, apply the policy, publish the clean root
-//   node curator.mjs revoke                  start a new epoch, invalidating every root so far
+//   node curator.mjs init              create the curator account, bound to the genesis policy's hash
+//   node curator.mjs publish           rebuild the pool, apply the current policy, publish the clean root
+//   node curator.mjs block <address>   add a depositor to the blocklist: new epoch, new policy, new root
+//   node curator.mjs unblock <address> remove a depositor from the blocklist
+//   node curator.mjs revoke            start a new epoch, invalidating every root so far
 //
-// The policy is deployments/<network>-policy.json: a blocklist of depositor
-// addresses. Its sha256 is stored on-chain when the curator is created, and the
-// clean set is published as deployments/<network>-curator.json.
+// Every publication writes, in one transaction, the policy's hash, the clean
+// root and a memo carrying the policy document and the clean set. The genesis
+// policy is deployments/<network>-policy.json; after that the policy in force
+// is the one in the latest memo the curator account stands behind.
 
-import { existsSync } from "node:fs";
 import { cleanTree } from "../../sdk/src/tree.mjs";
+import * as S from "../../sdk/src/solana.mjs";
 import {
-  NETWORK, PublicKey, demoKeypair, deploymentFile, explorer, ixs, policyHash, readDeployment, readKeypair, send,
-  syncPool, writeDeployment, connection, curatorAddress,
+  NETWORK, PublicKey, connection, demoKeypair, explorer, ixs, readDeployment, readKeypair, send, syncPool,
+  curatorAddress, poolAddress,
 } from "./common.mjs";
 
 export function curatorKeypair() {
   return process.env.CURATOR_KEYPAIR ? readKeypair(process.env.CURATOR_KEYPAIR) : demoKeypair("curator");
 }
 
-export function readPolicy() {
-  const file = deploymentFile("policy");
-  if (!existsSync(file)) throw new Error(`no policy at ${file}`);
-  return readDeployment("policy");
+const programs = () => {
+  const d = readDeployment();
+  const poolProgram = new PublicKey(d.poolProgram);
+  return { d, compliance: new PublicKey(d.complianceProgram), poolProgram, pool: poolAddress(poolProgram, BigInt(d.denomination)) };
+};
+
+/** The genesis policy: the blocklist in deployments/<network>-policy.json. */
+export const genesisBlocklist = () => readDeployment("policy").blocklist;
+
+export async function currentBlocklist() {
+  const { compliance, pool } = programs();
+  const set = await S.readCleanSet(connection, compliance, curatorKeypair().publicKey, pool);
+  return set?.blocklist ?? genesisBlocklist();
 }
 
 export async function init() {
-  const d = readDeployment();
+  const { compliance } = programs();
   const curator = curatorKeypair();
-  const compliance = new PublicKey(d.complianceProgram);
   const account = curatorAddress(compliance, curator.publicKey);
   if (await connection.getAccountInfo(account)) return { account, existed: true };
-  const hash = policyHash(readPolicy());
+  const hash = S.policyHash(S.policyDocument(genesisBlocklist()));
   const sig = await send([ixs.initCurator(compliance, curator.publicKey, hash)], [curator]);
-  console.log(`curator ${account.toBase58()} created: ${explorer(sig)}`);
   return { account, sig, existed: false };
 }
 
-/** Applies the policy to the pool's depositors and publishes the clean root. */
-export async function publish() {
-  const d = readDeployment();
-  const policy = readPolicy();
+/** Applies `blocklist` (default: the policy in force) and publishes the clean root. */
+export async function publish(blocklist, { revoke = false } = {}) {
+  const { compliance, poolProgram, pool } = programs();
   const curator = curatorKeypair();
-  const compliance = new PublicKey(d.complianceProgram);
-  const pool = new PublicKey(d.pool);
-  const { leaves, depositors } = await syncPool(new PublicKey(d.poolProgram), pool);
+  const policy = S.policyDocument(blocklist ?? (await currentBlocklist()));
+  const { leaves, depositors } = await syncPool(poolProgram, pool);
   const blocked = new Set(policy.blocklist);
   const excluded = depositors.map((who, i) => (blocked.has(who) ? i : -1)).filter((i) => i >= 0);
-  const clean = await cleanTree(leaves, excluded);
-  const cleanRoot = clean.root();
-  const sig = await send([ixs.publishRoot(compliance, curator.publicKey, cleanRoot)], [curator]);
-  const file = {
-    version: 1,
-    pool: pool.toBase58(),
-    curator: curator.publicKey.toBase58(),
-    policy_hash: Buffer.from(policyHash(policy)).toString("hex"),
-    deposit_count: leaves.length,
-    excluded,
-    clean_root: cleanRoot.toString(16).padStart(64, "0"),
-    published_in: sig,
-  };
-  writeDeployment("curator", file);
-  return { ...file, sig, leaves };
+  const cleanRoot = (await cleanTree(leaves, excluded)).root();
+  const sig = await send(
+    S.publishInstructions({ compliance, curator: curator.publicKey, pool, depositCount: leaves.length, excluded, blocklist: policy.blocklist, cleanRoot, revoke }),
+    [curator],
+  );
+  return { sig, depositCount: leaves.length, excluded, cleanRoot, policy, leaves };
+}
+
+export async function block(address) {
+  return publish([...(await currentBlocklist()), address], { revoke: true });
+}
+
+export async function unblock(address) {
+  return publish((await currentBlocklist()).filter((a) => a !== address));
 }
 
 export async function revoke() {
-  const d = readDeployment();
+  const { compliance } = programs();
   const curator = curatorKeypair();
-  const sig = await send([ixs.revoke(new PublicKey(d.complianceProgram), curator.publicKey)], [curator]);
-  console.log(`revoked: ${explorer(sig)}`);
-  return sig;
+  return { sig: await send([ixs.revoke(compliance, curator.publicKey)], [curator]) };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const cmd = process.argv[2];
-  const run = { init, publish, revoke }[cmd];
-  if (!run) {
-    console.error("usage: node curator.mjs init|publish|revoke");
+  const [cmd, arg] = process.argv.slice(2);
+  const run = { init, publish: () => publish(), block: () => block(arg), unblock: () => unblock(arg), revoke }[cmd];
+  if (!run || ((cmd === "block" || cmd === "unblock") && !arg)) {
+    console.error("usage: node curator.mjs init | publish | block <address> | unblock <address> | revoke");
     process.exit(2);
   }
   console.log(`network: ${NETWORK}`);
   const out = await run();
-  if (cmd === "publish") {
-    console.log(`published clean root over ${out.deposit_count} deposits, excluding [${out.excluded}]: ${explorer(out.sig)}`);
-  }
+  if (out.sig) console.log(`${cmd}: ${explorer(out.sig)}`);
+  if (out.excluded) console.log(`clean root over ${out.depositCount} deposits, excluding [${out.excluded}]`);
 }
