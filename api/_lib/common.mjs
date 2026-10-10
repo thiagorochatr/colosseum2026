@@ -20,8 +20,14 @@ export const TEMPO = {
   fee: "1000000",
 };
 
+// Two RPC endpoints. The browser's key is visible to anyone and is locked to the
+// site's domain, which checks the Origin header; the functions send no Origin,
+// so they use their own key, which stays secret here.
+const PUBLIC_DEVNET = "https://api.devnet.solana.com";
+
 export const SOLANA = {
-  rpc: process.env.SOLANA_RPC ?? "https://api.devnet.solana.com",
+  rpc: process.env.SOLANA_SERVER_RPC ?? process.env.SOLANA_RPC ?? PUBLIC_DEVNET,
+  browserRpc: process.env.SOLANA_RPC ?? PUBLIC_DEVNET,
   explorer: "https://explorer.solana.com",
   poolProgram: solanaDeployment.poolProgram,
   complianceProgram: solanaDeployment.complianceProgram,

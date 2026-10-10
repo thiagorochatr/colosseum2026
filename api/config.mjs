@@ -7,8 +7,12 @@ import { relayAddress } from "./_lib/solana.mjs";
 
 export default function handler(req, res) {
   try {
-    const { initialBlocklist: _, ...solana } = SOLANA;
-    reply(res, 200, { tempo: { ...TEMPO, relayer: relayerAddress() }, solana: { ...solana, relay: relayAddress() } });
+    // The browser gets only its own RPC endpoint, never the functions' key.
+    const { initialBlocklist: _, rpc: _server, browserRpc, ...solana } = SOLANA;
+    reply(res, 200, {
+      tempo: { ...TEMPO, relayer: relayerAddress() },
+      solana: { ...solana, rpc: browserRpc, relay: relayAddress() },
+    });
   } catch (e) {
     reply(res, 500, { error: e.message });
   }
