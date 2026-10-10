@@ -1,0 +1,6 @@
+[submodule "tempo/lib/forge-std"]
+	path = tempo/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "tempo/lib/tempo-std"]
+	path = tempo/lib/tempo-std
+	url = https://github.com/tempoxyz/tempo-std

@@ -21,6 +21,8 @@ Work in progress.
 | `docs/THREAT_MODEL.md` | Who can do what, and the known limits. |
 | `circuits/` | The withdraw circuit, frozen, with its tests. |
 | `tools/vectors/` | Test vectors for the circuit, computed with `mirror-core`. |
+| `solana/` | The compliance program and the bridge from snarkjs to `groth16-solana`. |
+| `tempo/` | Foundry project: the Solidity verifier, Poseidon and TIP-403 tests. |
 
 ## Prior work
 

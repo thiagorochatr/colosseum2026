@@ -123,7 +123,7 @@ The roots and the domain strings differ between chains, so a proof made for one 
   2. Inserts `commitment` at index `i` in both trees and records `depositor[i] = msg.sender`.
   3. Pushes both new roots.
 - **`exclude(i)`**, callable by anyone.
-  1. Requires that `i` exists, that `clean[i] != 0`, and that `isAuthorized(token.policyId, depositor[i])` is `false` in the TIP-403 registry.
+  1. Requires that `i` exists, that `clean[i] != 0`, and that `isAuthorizedSender(token.transferPolicyId(), depositor[i])` is `false` in the TIP-403 registry. That is the same check the token applies to a sender.
   2. Sets `clean[i] = 0` and increments `cleanEpoch`, which invalidates every earlier clean root. It then pushes the new root.
 - **`reinclude(i)`**, callable by anyone.
   1. Requires that `clean[i] == 0` and that the depositor is authorized again.
@@ -141,8 +141,7 @@ The roots and the domain strings differ between chains, so a proof made for one 
 **Events:** `Deposit(index, commitment, depositor, poolRoot, cleanRoot)`, `Excluded(index, depositor, cleanRoot, cleanEpoch)`, `Reincluded(index, cleanRoot)`, `Withdrawal(nullifierHash, recipient, relayer, fee)`.
 
 **Policy semantics:**
-- **Supported policy types:** simple `WHITELIST` and `BLACKLIST` policies. A deposit is clean while its depositor is authorized under the token's **current** policy.
-- **Compound policies** are out of scope.
+- **Supported policy types:** `WHITELIST`, `BLACKLIST` and `COMPOUND`. A deposit is clean while its depositor is an authorized **sender** under the token's **current** policy. For a compound policy that is its sender part, which `isAuthorizedSender` answers.
 - **Whitelist tokens:** the issuer must authorize the pool's own address, or the pool can neither receive nor pay.
 
 **Closing the race:** the issuer blocks an address and calls `exclude` for each of its deposits in **one Tempo batch transaction**, so no withdrawal fits in between. A keeper that watches the registry's `BlacklistUpdated` and `WhitelistUpdated` events covers issuers that do not batch.
@@ -212,9 +211,12 @@ A client rebuilds the clean tree from the pool tree and `excluded`, and must get
 - **Proving:** snarkjs with the circuit's `wasm` and the final `zkey`, in the browser or in Node.
 - **Verifying key:** both verifiers are generated from one `vk.json`, and its sha256 is printed by both deploy scripts. Matching digests are the check that the two chains verify the same statement.
 
-## 10. Open items, confirmed in Phase 3
+## 10. Confirmed in Phase 3
 
-1. The getter that returns a TIP-20 token's `transferPolicyId`, and how to create a TIP-20 token through the factory on Moderato.
-2. A Solidity Poseidon library that matches circomlib, and the gas for 20 `H2` hashes on Tempo against its transaction gas limit.
-3. Gas for the Groth16 pairing check on Tempo.
-4. Compute units for `VerifyClearance` with four public inputs. The `mirror-pool` model predicts about 97k.
+1. **Policy getter.** A TIP-20 token reports its policy with `transferPolicyId()`. A new token defaults to policy `1`, always-allow. Tokens are created with `TIP20_FACTORY.createToken(name, symbol, currency, quoteToken, admin, salt)` at `0x20Fc000000000000000000000000000000000000`. The interfaces come from `tempo-std` v0.1.6.
+2. **Policy checks.** `isAuthorizedSender` flips when an address is blacklisted, when it leaves a whitelist, and through the sender part of a compound policy. The token itself refuses a blocked sender and a blocked recipient. All of this is tested against Tempo's precompiles with `forge test --network tempo`.
+3. **Poseidon in Solidity.** `poseidon-solidity` 0.0.5, MIT, the library Semaphore uses through zk-kit. It matches the circomlib vector and the zero ladder, and rebuilds the vector pool and clean roots from each note's secrets. Its functions are public library functions, so the libraries are deployed and linked. One path of 20 `H2` hashes costs about 603k gas.
+4. **Groth16 on Tempo.**
+   - The snarkjs verifier costs about 216k gas to verify with four public inputs, and about 280k gas as a whole transaction on a local Tempo node.
+   - Deploying it costs about 2.43M gas on a local Tempo node, and an estimated 2.45M on Moderato. The difference from Ethereum comes from Tempo's 1,000 gas per deployed byte.
+5. **Groth16 on Solana.** `VerifyProof` with four public inputs costs 96,940 compute units in the worst case, matching mirror-pool's model.

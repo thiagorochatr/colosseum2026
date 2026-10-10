@@ -1,0 +1,8 @@
+{
+  "name": "tempo-contracts",
+  "private": true,
+  "license": "MIT",
+  "dependencies": {
+    "poseidon-solidity": "0.0.5"
+  }
+}
