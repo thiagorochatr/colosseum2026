@@ -54,7 +54,7 @@ export async function publish() {
     version: 1,
     pool: pool.toBase58(),
     curator: curator.publicKey.toBase58(),
-    policy_hash: policyHash(policy).toString("hex"),
+    policy_hash: Buffer.from(policyHash(policy)).toString("hex"),
     deposit_count: leaves.length,
     excluded,
     clean_root: cleanRoot.toString(16).padStart(64, "0"),

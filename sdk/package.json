@@ -4,6 +4,8 @@
   "type": "module",
   "license": "MIT",
   "exports": {
+    ".": "./src/index.mjs",
+    "./note": "./src/note.mjs",
     "./tree": "./src/tree.mjs",
     "./prove": "./src/prove.mjs",
     "./tempo": "./src/tempo.mjs",
@@ -13,8 +15,12 @@
     "test": "node --test --test-reporter=spec test/*.test.mjs"
   },
   "dependencies": {
+    "@solana/web3.js": "^1.99.0",
     "circomlibjs": "0.1.7",
     "snarkjs": "0.7.6",
     "viem": "^2.57.4"
+  },
+  "bin": {
+    "compliance": "./bin/cli.mjs"
   }
 }
