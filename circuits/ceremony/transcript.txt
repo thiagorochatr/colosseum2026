@@ -1,0 +1,31 @@
+[INFO]  snarkJS: Reading r1cs
+[INFO]  snarkJS: Reading tauG1
+[INFO]  snarkJS: Reading tauG2
+[INFO]  snarkJS: Reading alphatauG1
+[INFO]  snarkJS: Reading betatauG1
+[INFO]  snarkJS: Circuit hash: 
+		26f66c31 cf5c5698 48731801 5afe06ba
+		22bb82ea 80787a7e 1b8fc054 060fc94e
+		994dc258 d8b548f5 e9e1e325 3806a263
+		22068735 4e019b22 4f17343a 65864469
+[INFO]  snarkJS: Circuit Hash: 
+		26f66c31 cf5c5698 48731801 5afe06ba
+		22bb82ea 80787a7e 1b8fc054 060fc94e
+		994dc258 d8b548f5 e9e1e325 3806a263
+		22068735 4e019b22 4f17343a 65864469
+[INFO]  snarkJS: -------------------------
+[INFO]  snarkJS: contribution #2 Solana mainnet blockhash at slot 455095000 (announced slot 45509:
+		c309be62 0f3b075d f9e3e3cd 4868b87f
+		d52c5cdc e66a126a e01e8b73 37117270
+		f8581872 4e529ff2 c9a6389a 3f88684e
+		d2f98403 af717679 60d70f86 a99a5e6d
+[INFO]  snarkJS: Beacon generator: 894d821d67644065f5210c9ed3fa1a7b9c884c244d80ee940e8397dc449c9c14
+[INFO]  snarkJS: Beacon iterations Exp: 10
+[INFO]  snarkJS: -------------------------
+[INFO]  snarkJS: contribution #1 Thiago Rocha:
+		e35b607f dd19c43a c3367064 6568d4e4
+		2ad745e4 13ea84fb f42a2787 dda14856
+		30fd849c 362f2e8b 83416ff2 845324ff
+		8447ec82 0629fbcd ea55d22a 94a29eb5
+[INFO]  snarkJS: -------------------------
+[INFO]  snarkJS: ZKey Ok!

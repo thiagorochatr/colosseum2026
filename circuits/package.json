@@ -8,7 +8,7 @@
     "setup:dev": "sh scripts/setup-dev.sh",
     "vectors": "cargo run -q --release --manifest-path ../tools/vectors/Cargo.toml > test/vectors.json",
     "test": "node --test --test-reporter=spec test/*.test.mjs",
-    "fixtures:dev": "node scripts/prove-fixtures.mjs build/withdraw_dev.zkey build/proofs_dev.json && node scripts/solidity-fixtures.mjs build/proofs_dev.json ../tempo/test/fixtures/proofs_dev.json"
+    "verifiers": "sh scripts/regenerate-verifiers.sh ceremony/withdraw_final.zkey ceremony/vk.json \"circuits/ceremony/vk.json (final key, see docs/CEREMONY.md)\""
   },
   "devDependencies": {
     "circomlib": "2.0.5",

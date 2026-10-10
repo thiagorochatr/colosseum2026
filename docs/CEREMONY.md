@@ -36,8 +36,27 @@ When this was written, mainnet was near slot 455,087,000. The slot was expected 
 
 | # | Contributor | Contribution hash |
 |---|---|---|
-| 1 | Thiago Rocha | *pending* |
-| | Beacon | *pending* |
+| 1 | Thiago Rocha | `e35b607f dd19c43a c3367064 6568d4e4 2ad745e4 13ea84fb f42a2787 dda14856 30fd849c 362f2e8b 83416ff2 845324ff 8447ec82 0629fbcd ea55d22a 94a29eb5` |
+| 2 | Beacon | `c309be62 0f3b075d f9e3e3cd 4868b87f d52c5cdc e66a126a e01e8b73 37117270 f8581872 4e529ff2 c9a6389a 3f88684e d2f98403 af717679 60d70f86 a99a5e6d` |
+
+### The beacon, as applied
+
+- **Slot used:** `455,095,000`, the announced slot itself. It has a finalized block.
+- **Blockhash:** `AEyQPgBgGwQ4ELNHYbSkaccXjbLfgSpjoeNrE4gKeBcw`, identical on two independent RPC providers.
+- **As hex, the beacon generator:** `894d821d67644065f5210c9ed3fa1a7b9c884c244d80ee940e8397dc449c9c14`.
+- **Iterations exponent:** `10`.
+
+`circuits/ceremony/beacon.json` records these values.
+
+### Result
+
+| | sha256 |
+|---|---|
+| `withdraw_final.zkey`, the proving key | `a3217e83f95632a27e27d7593167cdfe5bb9ecaa0539e926cdce38248ce180f5` |
+| `circuits/ceremony/vk.json`, the verifying key | `e5d67dab6cb8819d8b6e11f1f36d460d68f542392049f86fc5c0b0b5bec07cf0` |
+| The verifying key in Solana's on-chain layout | `e453d98a0fea776c6cbc7a307532e44947a0f13aafeae3bebf8793897b455c4a` |
+
+The Solana module and the Solidity verifier are both generated from this key by `circuits/scripts/regenerate-verifiers.sh`. A check confirms that every constant of `vk.json` appears in the Solidity verifier. The circuit, Solana and Tempo test suites all pass under it.
 
 ### Two discarded attempts
 
@@ -63,4 +82,4 @@ cd circuits
 npx snarkjs zkey verify build/withdraw.r1cs ptau/ppot_0080_14.ptau ceremony/withdraw_final.zkey
 ```
 
-The output lists every contribution hash, which must match the table above. `ceremony/transcript.txt` holds the output recorded when the ceremony closed.
+The output lists every contribution hash, which must match the table above. `circuits/ceremony/transcript.txt` holds the output recorded when the ceremony closed, on 2026-10-10.

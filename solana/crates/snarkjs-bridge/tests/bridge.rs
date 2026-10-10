@@ -10,8 +10,8 @@ fn load(name: &str) -> Value {
 
 #[test]
 fn every_snarkjs_proof_verifies_under_arkworks() {
-    let vk = b::verifying_key(&load("vk_dev.json")).unwrap();
-    let proofs = load("proofs_dev.json");
+    let vk = b::verifying_key(&load("vk.json")).unwrap();
+    let proofs = load("proofs.json");
     for entry in proofs["proofs"].as_array().unwrap() {
         let p = b::proof(&entry["proof"]).unwrap();
         let inputs = b::public_signals(&entry["publicSignals"]).unwrap();
@@ -22,7 +22,7 @@ fn every_snarkjs_proof_verifies_under_arkworks() {
 
 #[test]
 fn reading_g2_coordinates_in_the_wrong_order_is_caught() {
-    let mut entry = load("proofs_dev.json")["proofs"][0]["proof"].clone();
+    let mut entry = load("proofs.json")["proofs"][0]["proof"].clone();
     let x = entry["pi_b"][0].as_array().unwrap().clone();
     entry["pi_b"][0] = Value::Array(vec![x[1].clone(), x[0].clone()]);
     let err = b::proof(&entry).unwrap_err();
@@ -31,8 +31,8 @@ fn reading_g2_coordinates_in_the_wrong_order_is_caught() {
 
 #[test]
 fn a_tampered_public_signal_does_not_verify() {
-    let vk = b::verifying_key(&load("vk_dev.json")).unwrap();
-    let entry = &load("proofs_dev.json")["proofs"][0];
+    let vk = b::verifying_key(&load("vk.json")).unwrap();
+    let entry = &load("proofs.json")["proofs"][0];
     let p = b::proof(&entry["proof"]).unwrap();
     let mut inputs = b::public_signals(&entry["publicSignals"]).unwrap();
     inputs[3] += ark_bn254::Fr::from(1u64);
@@ -41,7 +41,7 @@ fn a_tampered_public_signal_does_not_verify() {
 
 #[test]
 fn a_key_with_the_wrong_number_of_ic_points_is_refused() {
-    let mut vk = load("vk_dev.json");
+    let mut vk = load("vk.json");
     vk["nPublic"] = Value::from(3);
     assert!(b::verifying_key(&vk)
         .unwrap_err()

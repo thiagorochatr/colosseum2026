@@ -22,7 +22,7 @@ contract VerifierTest is Test {
 
     function setUp() public {
         verifier = new Groth16Verifier();
-        json = vm.readFile("test/fixtures/proofs_dev.json");
+        json = vm.readFile("test/fixtures/proofs.json");
     }
 
     function load(uint256 i) internal view returns (Proof memory p) {

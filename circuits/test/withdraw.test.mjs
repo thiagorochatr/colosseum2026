@@ -14,8 +14,10 @@ import * as snarkjs from "snarkjs";
 
 const here = new URL("..", import.meta.url).pathname;
 const WASM = join(here, "build/withdraw_js/withdraw.wasm");
-const ZKEY = join(here, "build/withdraw_dev.zkey");
-const VK = join(here, "build/vk_dev.json");
+// The ceremony's final key when it exists, otherwise the development key.
+const FINAL = existsSync(join(here, "ceremony/withdraw_final.zkey"));
+const ZKEY = join(here, FINAL ? "ceremony/withdraw_final.zkey" : "build/withdraw_dev.zkey");
+const VK = join(here, FINAL ? "ceremony/vk.json" : "build/vk_dev.json");
 const vectors = JSON.parse(readFileSync(join(here, "test/vectors.json"), "utf8"));
 
 const PUBLIC_ORDER = ["poolRoot", "cleanRoot", "nullifierHash", "binding"];

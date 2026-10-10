@@ -36,7 +36,7 @@ fn arr<const N: usize>(hex_str: &str) -> [u8; N] {
 }
 
 fn fixtures() -> Vec<ProofRequest> {
-    let text = include_str!("fixtures/proofs_dev.json");
+    let text = include_str!("fixtures/proofs.json");
     let v: serde_json::Value = serde_json::from_str(text).unwrap();
     v["proofs"]
         .as_array()
