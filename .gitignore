@@ -28,6 +28,7 @@ keys/
 *.keypair.json
 id.json
 # ...except the deliberately public test keys
+!solana/tests/keys/
 !solana/tests/keys/*.json
 
 # Editor and OS
