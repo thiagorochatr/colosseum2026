@@ -1,0 +1,83 @@
+name: On-chain
+
+# What the networks hold must be what this repository builds. Separate from CI
+# because it reads public RPCs: a network outage turns this red, never CI.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  NODE_VERSION: "24.21.0"
+  AGAVE_VERSION: "v4.1.2"
+  FOUNDRY_VERSION: "v1.8.5"
+
+jobs:
+  # The ceremony's last contribution is a beacon: the blockhash of the first
+  # Solana mainnet block at or after slot 455,095,000, announced in advance.
+  beacon:
+    name: Ceremony beacon is the mainnet blockhash
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: node circuits/ceremony/solana-beacon.mjs 455095000 | diff - circuits/ceremony/beacon.json
+
+  # The pool, its verifier and the linked Poseidon library on Moderato, byte for
+  # byte against this source, and the pool's immutables against the deployment.
+  tempo:
+    name: Moderato runs this source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: tempo/package-lock.json
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - run: npm ci
+        working-directory: tempo
+      - run: forge build
+        working-directory: tempo
+      - run: node script/check-deployed.mjs
+        working-directory: tempo
+
+  # Both programs rebuilt with the devnet ids and compared with what devnet
+  # runs. macOS arm64, the platform they were deployed from: platform-tools'
+  # prebuilt standard library carries its build path in panic messages, so only
+  # the same platform reproduces the bytes.
+  solana:
+    name: Devnet runs this source
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.local/share/solana
+            ~/.cache/solana
+          key: agave-macos-${{ env.AGAVE_VERSION }}
+      - name: Install Agave ${{ env.AGAVE_VERSION }}
+        run: |
+          if [ ! -x "$HOME/.local/share/solana/install/active_release/bin/solana" ]; then
+            sh -c "$(curl -sSfL "https://release.anza.xyz/${AGAVE_VERSION}/install")"
+          fi
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+      - run: sh scripts/check-deployed.sh
+        working-directory: solana

@@ -1,0 +1,281 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# Read-only. Nothing here publishes, comments or writes.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Tool versions, pinned. Rust itself is pinned by each rust-toolchain.toml.
+  NODE_VERSION: "24.21.0"
+  CIRCOM_VERSION: "v2.2.3"
+  CIRCOM_SHA256: "85342c7ff332d948df7c0c50ecf201e6129349aef550ce873f3c811b79fe53a3"
+  AGAVE_VERSION: "v4.1.2"
+  FOUNDRY_VERSION: "v1.8.5"
+
+# Third-party actions are pinned to commit SHAs, with the release beside each:
+# a tag is a pointer its owner can move.
+jobs:
+  # The circuit, from source to the published ceremony. Everything the other
+  # jobs prove with comes out of this job, and each file is checked against the
+  # hash recorded in docs/CEREMONY.md before anything uses it.
+  circuit:
+    name: Circuit and ceremony
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            circuits/package-lock.json
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tools/vectors/target
+            solana/target
+          key: circuit-cargo-${{ hashFiles('tools/vectors/Cargo.lock', 'solana/Cargo.lock') }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: circuits/ptau
+          key: ptau-ppot_0080_14
+
+      - name: Install circom ${{ env.CIRCOM_VERSION }}
+        run: |
+          curl -sSfL -o /usr/local/bin/circom "https://github.com/iden3/circom/releases/download/${CIRCOM_VERSION}/circom-linux-amd64"
+          echo "${CIRCOM_SHA256}  /usr/local/bin/circom" | sha256sum -c -
+          chmod +x /usr/local/bin/circom
+          circom --version
+
+      - run: npm ci
+        working-directory: circuits
+
+      - name: Compile, and check the R1CS and witness generator are the ceremony's
+        working-directory: circuits
+        run: |
+          npm run build
+          sha256sum -c - <<'SUMS'
+          4ef6cdab5240650c3a755fddb5f8868efa2334506761c0aa5954f5b1d3fedcae  build/withdraw.r1cs
+          dfe3ab63c33a4784c241d0723ed2487e80affe9b16ab5e3bd42fb5ba4ce9709a  build/withdraw_js/withdraw.wasm
+          e5d67dab6cb8819d8b6e11f1f36d460d68f542392049f86fc5c0b0b5bec07cf0  ceremony/vk.json
+          SUMS
+
+      - name: Fetch the phase-1 file and the final key
+        working-directory: circuits
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f ptau/ppot_0080_14.ptau ] || curl -sSfL -o ptau/ppot_0080_14.ptau \
+            https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/pot28_0080/ppot_0080_14.ptau
+          gh release download ceremony-v1 --repo "$GITHUB_REPOSITORY" -p withdraw_final.zkey -D ceremony
+          sha256sum -c - <<'SUMS'
+          3ca1149e9349b22b0ee0649399cfb787677129b7b1189d1899fc0d615d9583db  ptau/ppot_0080_14.ptau
+          a3217e83f95632a27e27d7593167cdfe5bb9ecaa0539e926cdce38248ce180f5  ceremony/withdraw_final.zkey
+          SUMS
+
+      # Recomputes every contribution from phase 1 to the final key and prints
+      # the chain. It must equal the transcript committed when the ceremony closed.
+      - name: Verify the ceremony against its transcript
+        working-directory: circuits
+        run: |
+          ./node_modules/.bin/snarkjs zkey verify build/withdraw.r1cs ptau/ppot_0080_14.ptau ceremony/withdraw_final.zkey \
+            | sed 's/\x1b\[[0-9;]*m//g' > "$RUNNER_TEMP/verify.txt"
+          diff "$RUNNER_TEMP/verify.txt" ceremony/transcript.txt
+
+      - name: Circuit tests
+        working-directory: circuits
+        run: npm test
+
+      # Generated files must be what their generators print today: the test
+      # vectors from mirror-core, and both chains' verifiers from the final key.
+      - name: Generated files match their sources
+        run: |
+          (cd circuits && npm run -s vectors) && git diff --exit-code circuits/test/vectors.json
+          ./circuits/node_modules/.bin/snarkjs zkey export solidityverifier circuits/ceremony/withdraw_final.zkey tempo/src/Groth16Verifier.sol
+          cargo run -q --manifest-path solana/Cargo.toml -p snarkjs-bridge -- vk circuits/ceremony/vk.json \
+            "circuits/ceremony/vk.json (final key, see docs/CEREMONY.md)" > solana/programs/compliance/src/vk.rs
+          git diff --exit-code tempo/src/Groth16Verifier.sol solana/programs/compliance/src/vk.rs
+          cmp circuits/ceremony/vk.json solana/crates/snarkjs-bridge/tests/fixtures/vk.json
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: proving-files
+          path: |
+            circuits/build/withdraw_js/withdraw.wasm
+            circuits/ceremony/withdraw_final.zkey
+          if-no-files-found: error
+          retention-days: 3
+
+  # The Tempo contracts against Tempo's real precompiles (TIP-20, TIP-403), with
+  # every proof made by the SDK through ffi, then the SDK's own tests.
+  tempo:
+    name: Tempo contracts and SDK
+    needs: circuit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            tempo/package-lock.json
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: proving-files
+          path: circuits
+      - run: npm ci
+      - run: npm ci
+        working-directory: tempo
+      - name: forge fmt
+        working-directory: tempo
+        run: forge fmt --check
+      - name: forge build
+        working-directory: tempo
+        run: forge build --sizes
+      - name: forge test
+        working-directory: tempo
+        run: forge test --network tempo -vv
+      - name: SDK tests
+        run: npm test
+
+  # Both Solana programs: rustfmt, clippy, the SBF build and the LiteSVM suites.
+  # The pool flow tests prove through the SDK, so this job needs the circuit too.
+  solana:
+    name: Solana programs
+    needs: circuit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.local/share/solana
+            ~/.cache/solana
+          key: agave-${{ env.AGAVE_VERSION }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            solana/target
+          key: solana-cargo-${{ hashFiles('solana/Cargo.lock') }}
+      - name: Install Agave ${{ env.AGAVE_VERSION }}
+        run: |
+          if [ ! -x "$HOME/.local/share/solana/install/active_release/bin/solana" ]; then
+            sh -c "$(curl -sSfL "https://release.anza.xyz/${AGAVE_VERSION}/install")"
+          fi
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+      - run: solana --version && cargo-build-sbf --version
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: proving-files
+          path: circuits
+      - run: npm ci
+      - name: make verify
+        working-directory: solana
+        run: make verify
+
+  # mirror-pool is prior work, imported unchanged. This job proves both halves
+  # of that sentence: the directory is the upstream commit's tree, and its own
+  # suite still passes in this repository.
+  mirror-pool:
+    name: mirror-pool (prior work)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The import is solanabr/mirror-pool at 3600c97, byte for byte
+        run: test "$(git rev-parse HEAD:mirror-pool)" = 571f96e98f3e431e1656906c4eb072386253dc87
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.local/share/solana
+            ~/.cache/solana
+          key: agave-${{ env.AGAVE_VERSION }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            mirror-pool/target
+          key: mirror-pool-cargo-${{ hashFiles('mirror-pool/Cargo.lock') }}
+      - name: Install Agave ${{ env.AGAVE_VERSION }}
+        run: |
+          if [ ! -x "$HOME/.local/share/solana/install/active_release/bin/solana" ]; then
+            sh -c "$(curl -sSfL "https://release.anza.xyz/${AGAVE_VERSION}/install")"
+          fi
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+      - name: make verify
+        working-directory: mirror-pool
+        run: make verify
+
+  # The web app's production build. It fetches the proving files from the
+  # ceremony-v1 release and refuses any whose sha256 is not the ceremony's.
+  web:
+    name: Web build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+  lint:
+    name: JavaScript lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: tools/lint/package-lock.json
+      - run: npm ci
+        working-directory: tools/lint
+      - run: npm run lint
+        working-directory: tools/lint
+
+  # The Rust dependency tree: advisories, licences, bans and sources, under the
+  # policy in solana/deny.toml, where every exception carries its reason.
+  supply-chain:
+    name: Rust supply chain
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        manifest: [solana/Cargo.toml, tools/vectors/Cargo.toml]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          manifest-path: ${{ matrix.manifest }}
+          arguments: ""
+          command: check
+          command-arguments: --config solana/deny.toml advisories bans licenses sources

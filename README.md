@@ -1,5 +1,7 @@
 # Hackathon Colosseum Worl's Fair 2026
 
+[![CI](https://github.com/thiagorochatr/colosseum2026/actions/workflows/ci.yml/badge.svg)](https://github.com/thiagorochatr/colosseum2026/actions/workflows/ci.yml) [![On-chain](https://github.com/thiagorochatr/colosseum2026/actions/workflows/onchain.yml/badge.svg)](https://github.com/thiagorochatr/colosseum2026/actions/workflows/onchain.yml)
+
 A compliance layer for private payments, built for the Colosseum World's Fair hackathon.
 
 > Tempo has compliance without privacy. Solana has privacy without compliance.
@@ -28,6 +30,7 @@ Work in progress.
 | `web/` | The app: one tab per chain. |
 | `api/` | The demo service as Vercel functions: faucet, relayer, issuer and curator, holding the test-network keys. |
 | `tempo/` | The private stablecoin pool, its tests, the relayer and the end-to-end flow. Live on Moderato. |
+| `.github/workflows/` | CI on every push, and a daily check that both networks run this source. See [SECURITY.md](SECURITY.md). |
 
 ## Prior work
 
