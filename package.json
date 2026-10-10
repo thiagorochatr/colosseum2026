@@ -19,5 +19,8 @@
   },
   "engines": {
     "node": "24.x"
+  },
+  "devDependencies": {
+    "vite-plugin-node-polyfills": "0.28.0"
   }
 }
