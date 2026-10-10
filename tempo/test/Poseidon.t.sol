@@ -17,11 +17,11 @@ contract PoseidonTest is Test {
         vectors = vm.readFile("../circuits/test/vectors.json");
     }
 
-    function test_matches_the_published_circomlib_vector() public view {
+    function test_matches_the_published_circomlib_vector() public pure {
         assertEq(PoseidonT3.hash([uint256(1), uint256(2)]), 0x115cc0f5e7d690413df64c6b9662e9cf2a3617f2743245519e19607a4417189a);
     }
 
-    function test_zero_ladder_matches_mirror_core() public view {
+    function test_zero_ladder_matches_mirror_core() public pure {
         uint256 z = 0;
         for (uint256 i = 0; i < DEPTH; i++) {
             z = PoseidonT3.hash([z, z]);
@@ -31,7 +31,7 @@ contract PoseidonTest is Test {
     }
 
     /// Folds `leaf` up a path the way mirror-core's MerkleProof::fold does.
-    function fold(uint256 leaf, uint256 index, uint256[] memory siblings) internal view returns (uint256 node) {
+    function fold(uint256 leaf, uint256 index, uint256[] memory siblings) internal pure returns (uint256 node) {
         node = leaf;
         for (uint256 j = 0; j < DEPTH; j++) {
             node = (index >> j) & 1 == 0 ? PoseidonT3.hash([node, siblings[j]]) : PoseidonT3.hash([siblings[j], node]);
