@@ -21,8 +21,9 @@ Work in progress.
 | `docs/THREAT_MODEL.md` | Who can do what, and the known limits. |
 | `circuits/` | The withdraw circuit, frozen, with its tests. |
 | `tools/vectors/` | Test vectors for the circuit, computed with `mirror-core`. |
-| `solana/` | The compliance program and the bridge from snarkjs to `groth16-solana`. |
-| `tempo/` | Foundry project: the Solidity verifier, Poseidon and TIP-403 tests. |
+| `solana/` | The compliance program, the compliant pool around mirror-pool, the client and curator CLI. Live on devnet. |
+| `sdk/` | Trees, circuit inputs, proving, and each chain's binding and proof layout. |
+| `tempo/` | The private stablecoin pool, its tests, the relayer and the end-to-end flow. Live on Moderato. |
 
 ## Prior work
 

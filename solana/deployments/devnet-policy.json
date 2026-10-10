@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "rule": "exclude every deposit whose depositor is on the blocklist",
+  "blocklist": [
+    "9vZ1LvzcL5BsTxWLWM7qP8hfNx664BuQnNSajHicvr22"
+  ]
+}

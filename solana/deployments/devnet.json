@@ -1,0 +1,12 @@
+{
+  "network": "devnet",
+  "complianceProgram": "HHapM3yA1JkhFJ1msTc7n3CEQ7PMZvxHMvQz7G7orQ2j",
+  "poolProgram": "Fg1FxuHcjj54ERfdQQL9tzZq9wDmNfjGmFSkAXxVYdzB",
+  "denomination": "100000000",
+  "curatorAuthority": "AdUihuLoEVQyyirSHLrrLMRvctXeFihqTQyGyV1sv5fA",
+  "deployTransactions": {
+    "complianceProgram": "4xFzzjv8CrB4gcHYHmsXWQmtkxcVXQfnNsTuuEJSgQLfwz7pNLaVtgN7B7HbaAtAuZcBaUhHN8HBzHKC8BKub7dy",
+    "poolProgram": "4QK69ip4mARZFRChxncfB8ZJox7mCiVp9PKt7uydLZGwDRnhpDM23pnyfUZUKW13nbXi5wmDeVJ4QsLfDUbSvpon"
+  },
+  "pool": "4RwTZq6ucSEDWEQZ6RSfa1ruhqEayS4QsF6LVPA7yvGP"
+}

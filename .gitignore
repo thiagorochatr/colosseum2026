@@ -42,3 +42,7 @@ tempo/.demo/
 
 # Local Tempo node deployments are throwaway
 tempo/deployments/31337*.json
+
+# Solana demo keys and local-validator deployments
+solana/.demo/
+solana/deployments/local*.json
