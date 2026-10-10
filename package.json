@@ -22,5 +22,8 @@
   },
   "devDependencies": {
     "vite-plugin-node-polyfills": "0.28.0"
+  },
+  "overrides": {
+    "rpc-websockets": "9.3.5"
   }
 }
