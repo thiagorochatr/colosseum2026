@@ -1,4 +1,4 @@
-# colosseum2026
+# Hackathon Colosseum Worl's Fair 2026
 
 A compliance layer for private payments, built for the Colosseum World's Fair hackathon.
 
@@ -26,7 +26,7 @@ Work in progress.
 
 ## Prior work
 
-`mirror-pool/` is my own earlier project. I, Thiago Rocha ([@thiagorochatr](https://github.com/thiagorochatr)), designed and built [mirror-pool](https://github.com/solanabr/mirror-pool) for Superteam Brasil's **Privacy-Through-Noise** bounty, and it was one of the three winning submissions:
+`mirror-pool/` is my own earlier project. I, Thiago ([@thiagorochatr](https://github.com/thiagorochatr)), designed and built [mirror-pool](https://github.com/solanabr/mirror-pool) for Superteam Brasil's **Privacy-Through-Noise** bounty, and it was one of the three winning submissions:
 
 - **Winners on Superteam Earn:** the [Noise bounty listing](https://superteam.fun/earn/listing/noise/) names me among the three winners, each awarded 1,300 USDG. My Earn profile is [superteam.fun/earn/t/thiago](https://superteam.fun/earn/t/thiago/).
 - **The winning PR:** [solanabr/mirror-pool#5](https://github.com/solanabr/mirror-pool/pull/5), merged into Superteam Brasil's repository on 2026-08-05.
