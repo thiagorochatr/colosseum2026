@@ -1,0 +1,38 @@
+[package]
+name = "compliant-pool-program"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "mirror-pool, unchanged, behind an entrypoint that pays out only against a clearance from a fixed curator"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+mirror-pool-program.workspace = true
+mirror-core.workspace = true
+compliance-interface.workspace = true
+solana-program.workspace = true
+solana-system-interface.workspace = true
+
+[features]
+no-entrypoint = []
+
+[dev-dependencies]
+compliance-program = { path = "../compliance", features = ["no-entrypoint"] }
+litesvm.workspace = true
+solana-keypair.workspace = true
+solana-signer.workspace = true
+solana-transaction.workspace = true
+solana-message.workspace = true
+solana-account.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+
+[lints.rust.unexpected_cfgs]
+level = "warn"
+check-cfg = [
+    'cfg(target_os, values("solana"))',
+    'cfg(feature, values("custom-heap", "custom-panic"))',
+]

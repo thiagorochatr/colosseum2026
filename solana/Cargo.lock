@@ -745,6 +745,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "compliant-pool-program"
+version = "0.1.0"
+dependencies = [
+ "compliance-interface",
+ "compliance-program",
+ "hex",
+ "litesvm",
+ "mirror-core",
+ "mirror-pool-program",
+ "serde_json",
+ "solana-account",
+ "solana-keypair",
+ "solana-message",
+ "solana-program",
+ "solana-signer",
+ "solana-system-interface",
+ "solana-transaction",
+]
+
+[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"

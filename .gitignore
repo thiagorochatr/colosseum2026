@@ -27,6 +27,8 @@ circuits/build/
 keys/
 *.keypair.json
 id.json
+# ...except the deliberately public test keys
+!solana/tests/keys/*.json
 
 # Editor and OS
 .DS_Store

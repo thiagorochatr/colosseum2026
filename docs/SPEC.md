@@ -172,15 +172,23 @@ A native program, in the same style as `mirror-pool`.
 
 A clearance is public evidence. Anyone, such as an offramp, a DEX or a transfer hook, can check that pool `P` spent nullifier `N`, bound to `binding`, under curator `C`'s clean root `R`.
 
-### 8.2 mirror-pool changes
+### 8.2 The compliant pool
 
-- **Deployment:** under a **new program id**. The program and the evidence from the Noise bounty stay untouched.
-- **New instruction:** `SubmitClearedSpend`, which carries the same action fields as `SubmitSpend` but no proof. It:
-  1. requires the clearance account for this pool and nullifier, owned by the compliance program;
-  2. requires that its curator is the pool's required curator;
-  3. recomputes `binding` from the action and requires that it equals the clearance's `binding`;
-  4. records the spend exactly as `SubmitSpend` does. The spend-record PDA still prevents a double spend.
-- **Requirement for a compliant pool:** no withdrawal may bypass the clearance. *Open:* the mechanism. The preferred option is a separate config PDA per pool, so the existing `Pool` layout and its pinned sizes do not change. This is decided in Phase 6.
+`mirror-pool/` stays exactly as imported. The compliant pool is a separate program, `solana/programs/compliant-pool`, that links mirror-pool as a library:
+
+- **Forwarded unchanged:** `InitPool`, `Deposit` and `SettleEpoch` go straight to mirror-pool's processor. Pools, vaults, spend records and settlement are mirror-pool's own.
+- **Refused:** mirror-pool's plain `SubmitSpend`, error `100`.
+- **Added:** `SubmitClearedSpend`, tag `4`.
+  1. It runs every check of mirror-pool's `SubmitSpend`, in the same order, except the root and the pairing.
+  2. In their place it requires the clearance from the compliance program, and checks that it:
+     - names this pool and this nullifier;
+     - was issued under the required curator;
+     - was issued **in this slot**;
+     - carries the binding this spend recomputes, relay key included.
+  3. It then writes the same spend record, so mirror-pool's `SettleEpoch` pays it out.
+- **One transaction:** a relay sends `VerifyClearance` and `SubmitClearedSpend` together. The same-slot rule means a clearance can never wait out a curator's revocation.
+- **The curator is fixed per deployment.** The compliance program id and the required curator authority are compile-time constants, `MIRROR_COMPLIANCE_PROGRAM_ID` and `MIRROR_REQUIRED_CURATOR`. mirror-pool creates pools permissionlessly and names them by denomination alone, so a curator chosen per pool would let anyone take a denomination with a curator of their own.
+- **The compliance program does not check the pool's owner.** A clearance names the pool account it was verified against, and a pool accepts only clearances naming itself. A fake pool account yields a clearance for a different address, which no pool consumes. A test checks exactly this.
 
 ### 8.3 Curator, off-chain
 

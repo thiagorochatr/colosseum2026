@@ -6,7 +6,8 @@
   "exports": {
     "./tree": "./src/tree.mjs",
     "./prove": "./src/prove.mjs",
-    "./tempo": "./src/tempo.mjs"
+    "./tempo": "./src/tempo.mjs",
+    "./solana": "./src/solana.mjs"
   },
   "scripts": {
     "test": "node --test --test-reporter=spec test/*.test.mjs"
