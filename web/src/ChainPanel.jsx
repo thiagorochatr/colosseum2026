@@ -87,6 +87,13 @@ export default function ChainPanel({ chain, copy }) {
       }
     });
 
+  const settleBatch = () =>
+    run("Settling", async () => {
+      const r = await chain.settle();
+      if (r.settled) say(`The batch settled: ${r.settled} withdrawals paid at once.`, r.tx);
+      else say(`Not yet: ${r.pending} withdrawal waiting, and the pool needs at least ${r.floor} to settle.`);
+    });
+
   const block = (address, blocked) =>
     run(blocked ? "Unblocking" : "Blocking", async () => {
       const r = blocked ? await chain.unblock(address) : await chain.block(address);
@@ -158,6 +165,12 @@ export default function ChainPanel({ chain, copy }) {
                           <button className="link" onClick={() => setWithdrawing(null)}>Cancel</button>
                         </div>
                       </div>
+                    )}
+                    {st?.label === "Waiting for the batch" && chain.settle && (
+                      <>
+                        <p className="hint">The pool pays withdrawals in batches of at least two, so a single withdrawal cannot be timed back to its deposit.</p>
+                        <button onClick={settleBatch} disabled={!!busy}>Settle the batch</button>
+                      </>
                     )}
                     {st?.label === "Excluded" && <p className="hint bad">The depositor was blocked, so this deposit is outside the clean set. No valid proof exists for it.</p>}
                   </li>

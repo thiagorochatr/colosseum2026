@@ -19,13 +19,34 @@ const K_FLOOR = 2;
 
 const send = (ixs, signers) => sendAndConfirmTransaction(connection, new Transaction().add(...ixs), signers, { commitment: "confirmed" });
 
-async function pendingSpends() {
-  const accounts = await connection.getProgramAccounts(program, { filters: [{ memcmp: { offset: 96, bytes: pool.toBase58() } }] });
-  return accounts.filter((a) => a.account.data.length >= 160 && a.account.data[0] === 1 && a.account.data[1] === 1);
+const isPending = (data) => data.length >= 160 && data[0] === 1 && data[1] === 1;
+
+/**
+ * Every pending spend record of the pool. `known` are spend records this
+ * request just created: a public RPC node may not index them yet, so they are
+ * read directly and merged in.
+ */
+async function pendingSpends(known = []) {
+  const accounts = await S.withBackoff(() =>
+    connection.getProgramAccounts(program, { filters: [{ memcmp: { offset: 96, bytes: pool.toBase58() } }] }),
+  );
+  const found = accounts.filter((a) => isPending(a.account.data));
+  for (const pubkey of known) {
+    if (found.some((a) => a.pubkey.equals(pubkey))) continue;
+    for (let i = 0; i < 10; i++) {
+      const account = await connection.getAccountInfo(pubkey, "confirmed");
+      if (account) {
+        if (isPending(account.data)) found.push({ pubkey, account });
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 400));
+    }
+  }
+  return found;
 }
 
-async function settle(allowBelowFloor = false) {
-  const pending = await pendingSpends();
+async function settle(allowBelowFloor = false, known = []) {
+  const pending = await pendingSpends(known);
   if (!pending.length) return null;
   const { TransactionInstruction } = await import("@solana/web3.js");
   const r = relay();
@@ -99,14 +120,17 @@ export const solanaActions = {
       ],
       [r],
     );
-    const pending = (await pendingSpends()).length;
-    const settled = pending >= K_FLOOR ? await settle(false) : null;
+    const spend = S.spendAddress(program, pool, S.fieldBytes(inputs[2]));
+    const pending = (await pendingSpends([spend])).length;
+    const settled = pending >= K_FLOOR ? await settle(false, [spend]) : null;
     return { tx, pending: settled ? 0 : pending, settled };
   },
 
   /** Settles whatever is pending; below the floor only once the pool's timeout has run. */
   async settle({ allowBelowFloor = false }) {
-    return (await settle(Boolean(allowBelowFloor))) ?? { settled: 0 };
+    const pending = (await pendingSpends()).length;
+    if (!allowBelowFloor && pending < K_FLOOR) return { settled: 0, pending, floor: K_FLOOR };
+    return (await settle(Boolean(allowBelowFloor))) ?? { settled: 0, pending, floor: K_FLOOR };
   },
 
   /** The curator publishes a root covering every deposit so far. */

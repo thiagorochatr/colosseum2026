@@ -97,6 +97,8 @@ export function solanaChain(cfg) {
       return { tx: out.tx, settled: out.settled, pending: out.pending, received: unit(BigInt(cfg.denomination) - fee) };
     },
 
+    settle: () => post("/api/solana/settle", {}),
+
     block: (address) => post("/api/solana/block", { address }),
     unblock: (address) => post("/api/solana/unblock", { address }),
   };
