@@ -1,0 +1,15 @@
+export async function post(path, body) {
+  const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const out = await res.json();
+  if (!res.ok) throw new Error(out.error ?? `HTTP ${res.status}`);
+  return out;
+}
+
+export async function getConfig() {
+  const res = await fetch("/api/config");
+  if (!res.ok) throw new Error("the demo service is not reachable");
+  return res.json();
+}
+
+export const PROVING = { wasm: "/zk/withdraw.wasm", zkey: "/zk/withdraw_final.zkey" };
+export const short = (s, n = 4) => (s ? `${s.slice(0, n + 2)}…${s.slice(-n)}` : "");

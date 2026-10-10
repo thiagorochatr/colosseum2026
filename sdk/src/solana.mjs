@@ -152,11 +152,38 @@ export const instructions = {
 /** The policy document's hash, as stored in a curator account. */
 export const policyHash = (doc) => hexToBytes(sha256(new TextEncoder().encode(JSON.stringify(doc))));
 
+// ------------------------------------------------------------- careful reads
+//
+// Public RPC endpoints rate-limit hard. Transactions never change once
+// confirmed, so each is fetched once and cached, sequentially, with backoff.
+
+const txCache = new Map();
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const limited = (e) => /429|Too many requests|rate limit/i.test(String(e?.message ?? e));
+
+export async function withBackoff(fn, attempts = 7) {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (!limited(e) || i >= attempts - 1) throw e;
+      await sleep(500 * 2 ** i);
+    }
+  }
+}
+
+async function fetchTx(connection, signature) {
+  if (txCache.has(signature)) return txCache.get(signature);
+  const tx = await withBackoff(() => connection.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }));
+  if (tx) txCache.set(signature, tx);
+  return tx;
+}
+
 // ------------------------------------------------------------------ pool sync
 
 /** The pool account's deposit count and current root. */
 export async function poolState(connection, pool) {
-  const info = await connection.getAccountInfo(pool, "confirmed");
+  const info = await withBackoff(() => connection.getAccountInfo(pool, "confirmed"));
   if (!info) throw new Error(`no pool at ${pool.toBase58()}`);
   const d = Uint8Array.from(info.data);
   const rootPos = readU32(d, 48);
@@ -171,7 +198,7 @@ export async function syncPool(connection, program, pool) {
   const sigs = [];
   let before;
   for (;;) {
-    const page = await connection.getSignaturesForAddress(pool, { before, limit: 1000 }, "confirmed");
+    const page = await withBackoff(() => connection.getSignaturesForAddress(pool, { before, limit: 1000 }, "confirmed"));
     sigs.push(...page);
     if (page.length < 1000) break;
     before = page[page.length - 1].signature;
@@ -180,7 +207,7 @@ export async function syncPool(connection, program, pool) {
   const deposits = [];
   for (const { signature, err } of sigs) {
     if (err) continue;
-    const tx = await connection.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+    const tx = await fetchTx(connection, signature);
     const msg = tx.transaction.message;
     const keys = msg.staticAccountKeys ?? msg.accountKeys;
     for (const ci of msg.compiledInstructions ?? msg.instructions) {
@@ -199,4 +226,63 @@ export async function syncPool(connection, program, pool) {
   const tree = await MerkleTree.from(deposits.map((x) => x.commitment));
   if (tree.root() !== state.currentRoot) throw new Error("the rebuilt pool root is not the pool's current root");
   return { leaves: deposits.map((x) => x.commitment), depositors: deposits.map((x) => x.depositor), deposits, root: state.currentRoot };
+}
+
+// ------------------------------------------------- the curator's clean set, on-chain
+//
+// The curator account holds only roots. The clean set behind the latest root
+// travels in a Memo instruction of the same transaction that publishes it, so
+// any client can rebuild the clean tree with nothing but an RPC endpoint, and
+// checks the root it rebuilds against the curator account.
+
+export const MEMO_PROGRAM = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
+
+/** { pool, depositCount, excluded, blocklist, cleanRoot } as a Memo instruction. */
+export function cleanSetMemo({ pool, depositCount, excluded, blocklist, cleanRoot }) {
+  const body = { v: 1, pool: pool.toBase58?.() ?? pool, n: Number(depositCount), x: excluded, b: blocklist, r: BigInt(cleanRoot).toString(16) };
+  return new TransactionInstruction({ programId: MEMO_PROGRAM, keys: [], data: Buffer.from(JSON.stringify(body)) });
+}
+
+/** The curator account's epoch and the roots of its current epoch. */
+export async function curatorState(connection, compliance, authority) {
+  const info = await withBackoff(() => connection.getAccountInfo(curatorAddress(compliance, authority), "confirmed"));
+  if (!info) return null;
+  const d = Uint8Array.from(info.data);
+  const epoch = readU64(d, 2);
+  const roots = [];
+  for (let i = 0; i < 32; i++) {
+    const root = readBe(d.subarray(78 + 32 * i, 110 + 32 * i));
+    if (root !== 0n && readU64(d, 1102 + 8 * i) === epoch) roots.push(root);
+  }
+  return { epoch, roots, policyHash: bytesToHex(d.subarray(46, 78)) };
+}
+
+/**
+ * The latest clean set the curator published for `pool`, read from its memo
+ * and accepted only if its root is one the curator holds in its current epoch.
+ */
+export async function readCleanSet(connection, compliance, authority, pool) {
+  const state = await curatorState(connection, compliance, authority);
+  if (!state) return null;
+  const sigs = await withBackoff(() => connection.getSignaturesForAddress(curatorAddress(compliance, authority), { limit: 20 }, "confirmed"));
+  for (const { signature, err } of sigs) {
+    if (err) continue;
+    const tx = await fetchTx(connection, signature);
+    const msg = tx.transaction.message;
+    const keys = msg.staticAccountKeys ?? msg.accountKeys;
+    for (const ci of msg.compiledInstructions ?? msg.instructions) {
+      if (!keys[ci.programIdIndex].equals(MEMO_PROGRAM)) continue;
+      let body;
+      try {
+        body = JSON.parse(new TextDecoder().decode(Uint8Array.from(ci.data)));
+      } catch {
+        continue;
+      }
+      if (body.v !== 1 || body.pool !== pool.toBase58()) continue;
+      const cleanRoot = BigInt(`0x${body.r}`);
+      if (!state.roots.includes(cleanRoot)) continue; // revoked, or never published
+      return { depositCount: body.n, excluded: body.x, blocklist: body.b, cleanRoot, signature, epoch: state.epoch };
+    }
+  }
+  return null;
 }

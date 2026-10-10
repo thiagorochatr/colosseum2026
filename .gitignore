@@ -46,3 +46,8 @@ tempo/deployments/31337*.json
 # Solana demo keys and local-validator deployments
 solana/.demo/
 solana/deployments/local*.json
+
+# Proving files copied in for the web app
+web/public/zk/
+web/dist/
+.vercel/

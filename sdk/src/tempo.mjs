@@ -29,12 +29,22 @@ const REINCLUDED = parseAbiItem("event Reincluded(uint256 indexed index, uint256
  * Rebuilds the pool's leaves and its excluded set from events, in order.
  * Returns the last roots the events announced so a caller can check them.
  */
+/** getLogs over [from, latest] in chunks, since public RPCs cap the block range. */
+async function logsSince(publicClient, address, event, fromBlock, chunk = 100_000n) {
+  const latest = await publicClient.getBlockNumber();
+  const out = [];
+  for (let from = BigInt(fromBlock); from <= latest; from += chunk) {
+    const to = from + chunk - 1n < latest ? from + chunk - 1n : latest;
+    out.push(...(await publicClient.getLogs({ address, event, fromBlock: from, toBlock: to })));
+  }
+  return out;
+}
+
 export async function syncPool(publicClient, { pool, fromBlock }) {
-  const range = { address: pool, fromBlock: BigInt(fromBlock), toBlock: "latest" };
   const [deposits, exclusions, reinclusions] = await Promise.all([
-    publicClient.getLogs({ ...range, event: DEPOSIT }),
-    publicClient.getLogs({ ...range, event: EXCLUDED }),
-    publicClient.getLogs({ ...range, event: REINCLUDED }),
+    logsSince(publicClient, pool, DEPOSIT, fromBlock),
+    logsSince(publicClient, pool, EXCLUDED, fromBlock),
+    logsSince(publicClient, pool, REINCLUDED, fromBlock),
   ]);
   const leaves = [];
   for (const log of deposits) {

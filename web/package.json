@@ -1,0 +1,21 @@
+{
+  "name": "web",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "artifacts": "node scripts/fetch-artifacts.mjs",
+    "build": "node scripts/fetch-artifacts.mjs && vite build",
+    "vite": "vite"
+  },
+  "dependencies": {
+    "compliance-sdk": "*",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "6.1.2",
+    "vite": "8.3.4",
+    "vite-plugin-node-polyfills": "0.28.0"
+  }
+}

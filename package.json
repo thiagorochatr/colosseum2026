@@ -1,0 +1,20 @@
+{
+  "name": "colosseum2026",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "workspaces": [
+    "sdk",
+    "web"
+  ],
+  "scripts": {
+    "dev": "node web/dev-server.mjs",
+    "build": "npm run build -w web",
+    "test": "npm test -w sdk"
+  },
+  "dependencies": {
+    "compliance-sdk": "*",
+    "@solana/web3.js": "1.99.0",
+    "viem": "2.57.4"
+  }
+}
