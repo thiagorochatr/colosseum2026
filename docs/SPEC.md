@@ -164,9 +164,10 @@ A native program, in the same style as `mirror-pool`.
 - **`UpdatePolicy { policy_hash }`**, signed by the authority. It replaces the policy hash when the policy changes, for example when a depositor is blocked. Roots and epoch are untouched.
 - **`VerifyClearance { proof, poolRoot, cleanRoot, nullifierHash, binding }`**:
   1. Checks the pool account:
-     - it is owned by the configured `mirror-pool` program id;
-     - it carries the expected pool version;
+     - it has mirror-pool's pool layout: its length, version and tree depth;
      - `poolRoot` is in its 128-root history, at offset 696.
+
+     It does not check the account's owner. Section 8.2 explains why a fake pool account gains nothing.
   2. Checks that `cleanRoot` is in the curator's ring, tagged with the current epoch.
   3. Verifies the Groth16 proof with `groth16-solana` over the four public inputs.
   4. Creates the clearance account. Because its address is keyed by pool and nullifier, it can exist only once.
