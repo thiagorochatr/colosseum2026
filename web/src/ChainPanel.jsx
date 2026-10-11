@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { addNote, loadNotes, downloadNote } from "./lib/store.js";
+import { addNote, loadNotes, downloadNote, importNote } from "./lib/store.js";
 import { short } from "./lib/api.js";
 
 function Chip({ tone, children }) {
@@ -61,6 +61,9 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
   const [error, setError] = useState(null);
   const [withdrawing, setWithdrawing] = useState(null);
   const [recipient, setRecipient] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [pasted, setPasted] = useState("");
+  const [importError, setImportError] = useState(null);
 
   // Each action opens a log entry; the chain adapter narrates its steps into it.
   function begin(title) {
@@ -114,9 +117,34 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
 
   const deposit = () =>
     run(`Deposit ${chain.denominationLabel}`, async (step) => {
-      const { note } = await chain.deposit(step);
-      addNote(chain.id, note);
+      await chain.deposit(step, (note) => addNote(chain.id, note));
+      step("Download the withdrawal key below. It is the only way to withdraw this deposit, from this browser or any other", { done: true });
     });
+
+  const save = (note) => {
+    downloadNote(note);
+    setNotes(loadNotes(chain.id));
+    refresh();
+  };
+
+  function importKey(text) {
+    try {
+      importNote(text.trim(), chain.scope);
+      setImporting(false);
+      setPasted("");
+      setImportError(null);
+      setNotes(loadNotes(chain.id));
+      refresh();
+    } catch (e) {
+      setImportError(e.message);
+    }
+  }
+
+  async function importFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) importKey(await file.text());
+  }
 
   const startWithdraw = (i) => {
     setWithdrawing(i);
@@ -168,7 +196,7 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
             <h2>2 · Deposit</h2>
             <p>Every deposit is exactly {chain.denominationLabel}, so withdrawals cannot be matched to deposits by amount.</p>
             <button className="primary" onClick={deposit} disabled={!!busy}>Deposit {chain.denominationLabel}</button>
-            <p className="hint">This creates a withdrawal key in your browser. Whoever holds the key can withdraw the deposit.</p>
+            <p className="hint">This creates a withdrawal key in your browser. Whoever holds the key can withdraw the deposit, from any browser.</p>
           </section>
 
           <section className="card">
@@ -180,10 +208,13 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
                 return (
                   <li key={i}>
                     <div className="row">
-                      <span>Deposit #{st?.index >= 0 ? st.index : "…"}</span>
+                      <span>{!st ? "Deposit #…" : st.index >= 0 ? `Deposit #${st.index}` : "Withdrawal key"}</span>
                       {st && <Chip tone={st.tone}>{st.label}</Chip>}
-                      <button className="link" onClick={() => downloadNote(note)}>Download key</button>
+                      <button className={note.saved ? "link" : ""} onClick={() => save(note)}>Download key</button>
                     </div>
+                    {!note.saved && st && !["Withdrawn", "Not deposited"].includes(st.label) && (
+                      <p className="hint bad">Not backed up. This key exists only in this browser: if its data is cleared, the deposit cannot be withdrawn. Download it and keep the file safe.</p>
+                    )}
                     {st?.canWithdraw && withdrawing !== i && (
                       <button onClick={() => startWithdraw(i)} disabled={!!busy}>Withdraw…</button>
                     )}
@@ -211,6 +242,21 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
                 );
               })}
             </ul>
+            {!importing && (
+              <button className="link" onClick={() => setImporting(true)}>Import a withdrawal key…</button>
+            )}
+            {importing && (
+              <div className="withdraw">
+                <p className="hint">Deposited from another browser or device? Choose its key file, or paste the file's contents.</p>
+                <input type="file" accept=".json,application/json" onChange={importFile} />
+                <textarea className="mono" rows={4} value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder='{ "version": 1, "chain": … }' />
+                {importError && <p className="hint bad">{importError}</p>}
+                <div className="row">
+                  <button className="primary" onClick={() => importKey(pasted)} disabled={!pasted.trim()}>Import</button>
+                  <button className="link" onClick={() => { setImporting(false); setImportError(null); }}>Cancel</button>
+                </div>
+              </div>
+            )}
           </section>
           <section className="card">
             <h2>Protocol log</h2>

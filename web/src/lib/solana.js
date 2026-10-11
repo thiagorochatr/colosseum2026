@@ -23,9 +23,12 @@ export function solanaChain(cfg) {
   const unit = (lamports) => `${(Number(lamports) / 1e9).toLocaleString(undefined, { maximumFractionDigits: 4 })} SOL`;
   const cluster = "?cluster=devnet";
 
+  const scope = { chain: "solana", network: "devnet", pool: cfg.pool, denomination: BigInt(cfg.denomination) };
+
   return {
     id: "solana",
     me,
+    scope,
     unit,
     denominationLabel: unit(cfg.denomination),
     txLink: (s) => `${cfg.explorer}/tx/${s}${cluster}`,
@@ -68,8 +71,10 @@ export function solanaChain(cfg) {
       return { index, label: "Clean", tone: "good", canWithdraw: true };
     },
 
-    async deposit(step) {
-      const note = createNote({ chain: "solana", network: "devnet", pool: cfg.pool, denomination: BigInt(cfg.denomination) });
+    /** `keep` stores the key before anything is sent, so a lost confirmation cannot lose it. */
+    async deposit(step, keep) {
+      const note = createNote(scope);
+      keep(note);
       step("Created a withdrawal key in this browser", { detail: "Two random field elements, k and r. They stay in this browser unless you download the key.", done: true });
       const commitment = await commitmentOf(note);
       step("Computed the commitment", { detail: [["C = Poseidon(k, r, denomination)", field(commitment)]], done: true });

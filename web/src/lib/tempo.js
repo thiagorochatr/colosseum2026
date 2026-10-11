@@ -19,9 +19,12 @@ export function tempoChain(cfg) {
   const read = (functionName, args = []) => publicClient.readContract({ address: cfg.pool, abi: T.POOL_ABI, functionName, args });
   const unit = (v) => `${(Number(v) / 1e6).toLocaleString()} dUSD`;
 
+  const scope = { chain: "tempo", network: "moderato", pool: cfg.pool, denomination: BigInt(cfg.denomination) };
+
   return {
     id: "tempo",
     me,
+    scope,
     unit,
     denominationLabel: unit(cfg.denomination),
     txLink: (h) => `${cfg.explorer}/tx/${h}`,
@@ -56,8 +59,10 @@ export function tempoChain(cfg) {
       return { index, label: "Clean", tone: "good", canWithdraw: true };
     },
 
-    async deposit(step) {
-      const note = createNote({ chain: "tempo", network: "moderato", pool: cfg.pool, denomination: BigInt(cfg.denomination) });
+    /** `keep` stores the key before anything is sent, so a lost confirmation cannot lose it. */
+    async deposit(step, keep) {
+      const note = createNote(scope);
+      keep(note);
       step("Created a withdrawal key in this browser", { detail: "Two random field elements, k and r. They stay in this browser unless you download the key.", done: true });
       const commitment = await commitmentOf(note);
       step("Computed the commitment", { detail: [["C = Poseidon(k, r, denomination)", field(commitment)]], done: true });

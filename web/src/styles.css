@@ -76,7 +76,7 @@ a { color: var(--accent); }
 .notes li:first-child { border-top: none; padding-top: 0; }
 .withdraw { width: 100%; display: flex; flex-direction: column; gap: 6px; }
 .withdraw label { display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; }
-input { font: inherit; width: 100%; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+input, textarea { font: inherit; width: 100%; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
 table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
 th, td { text-align: left; padding: 7px 4px; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 600; }
