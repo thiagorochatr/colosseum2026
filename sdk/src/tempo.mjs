@@ -93,6 +93,21 @@ export const POOL_ABI = parseAbi([
   "event Excluded(uint256 indexed index, address indexed depositor, uint256 cleanRoot, uint64 cleanEpoch)",
   "event Reincluded(uint256 indexed index, uint256 cleanRoot)",
   "event Withdrawal(uint256 indexed nullifierHash, address indexed recipient, address indexed relayer, uint256 fee)",
+  "error InvalidCommitment()",
+  "error PoolFull()",
+  "error TransferFailed()",
+  "error UnknownIndex()",
+  "error AlreadyExcluded()",
+  "error NotExcluded()",
+  "error StillAuthorized()",
+  "error StillUnauthorized()",
+  "error InvalidRecipient()",
+  "error FeeTooHigh()",
+  "error RelayerRequired()",
+  "error NullifierSpent()",
+  "error UnknownPoolRoot()",
+  "error StaleCleanRoot()",
+  "error InvalidProof()",
 ]);
 
 export const TIP20_ABI = parseAbi([
@@ -108,6 +123,47 @@ export const REGISTRY_ABI = parseAbi([
   "function modifyPolicyBlacklist(uint64 policyId, address account, bool restricted)",
   "function isAuthorizedSender(uint64 policyId, address user) view returns (bool)",
 ]);
+
+// ------------------------------------------------------------------ the keeper
+
+/**
+ * The pool's rule, applied: which deposits to exclude and which to reinclude
+ * so that the clean set matches the token's current policy. `authorized(a)`
+ * says whether depositor `a` is an authorized sender under that policy.
+ */
+export function planSweep({ depositors, excluded }, authorized) {
+  const out = new Set(excluded);
+  const plan = { exclude: [], reinclude: [] };
+  depositors.forEach((d, i) => {
+    const ok = authorized(d);
+    if (!ok && !out.has(i)) plan.exclude.push(i);
+    if (ok && out.has(i)) plan.reinclude.push(i);
+  });
+  return plan;
+}
+
+/**
+ * Reads the pool and the token's current policy and plans a sweep. The policy
+ * is read from the token on every call, since the issuer can switch it. Every
+ * read is a view call: only a plan with work in it costs gas, once sent.
+ */
+export async function readSweep(publicClient, { pool, token, fromBlock, synced }) {
+  synced ??= await syncPool(publicClient, { pool, fromBlock });
+  const policy = await publicClient.readContract({ address: token, abi: TIP20_ABI, functionName: "transferPolicyId" });
+  const unique = [...new Set(synced.depositors.map((d) => d.toLowerCase()))];
+  const answers = await Promise.all(
+    unique.map((a) => publicClient.readContract({ address: REGISTRY, abi: REGISTRY_ABI, functionName: "isAuthorizedSender", args: [policy, a] })),
+  );
+  const ok = new Map(unique.map((a, i) => [a, answers[i]]));
+  const authorized = (a) => ok.get(a.toLowerCase());
+  return { ...planSweep(synced, authorized), policy, synced, authorized };
+}
+
+/** A sweep as one batch transaction: every exclude and reinclude it needs. */
+export function sweepCalls({ pool, exclude, reinclude }) {
+  const call = (functionName, i) => ({ to: pool, data: encodeFunctionData({ abi: POOL_ABI, functionName, args: [BigInt(i)] }) });
+  return [...exclude.map((i) => call("exclude", i)), ...reinclude.map((i) => call("reinclude", i))];
+}
 
 /** Approve and deposit as ONE Tempo batch transaction: the user signs once. */
 export function depositCalls({ pool, token, denomination, commitment }) {

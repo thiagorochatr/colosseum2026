@@ -31,8 +31,9 @@ test("notes round-trip through their file format and are never reused", () => {
 
 test("the Tempo ABI matches the compiled pool", { skip: !existsSync(`${root}tempo/out/CompliantPool.sol/CompliantPool.json`) && "build tempo/ first" }, () => {
   const compiled = json("tempo/out/CompliantPool.sol/CompliantPool.json").abi;
-  const sel = (abi, item) => (item.type === "event" ? toEventSelector(item) : toFunctionSelector(item));
-  const known = new Set(compiled.filter((i) => i.type === "function" || i.type === "event").map((i) => sel(compiled, i)));
+  const sel = (abi, item) =>
+    item.type === "event" ? toEventSelector(item) : toFunctionSelector(`${item.name}(${item.inputs.map((x) => x.type).join(",")})`);
+  const known = new Set(compiled.filter((i) => ["function", "event", "error"].includes(i.type)).map((i) => sel(compiled, i)));
   for (const item of tempo.POOL_ABI) assert.ok(known.has(sel(tempo.POOL_ABI, item)), `${item.name} is not in the compiled pool`);
 });
 
@@ -45,6 +46,26 @@ test("the Tempo batch builders encode approve+deposit and block+exclude", () => 
   const block = tempo.blockAndExcludeCalls({ pool, policy: 1253146n, account: pool, indices: [1, 4] });
   assert.equal(block.length, 3);
   assert.equal(block[0].to, tempo.REGISTRY);
+});
+
+test("a sweep excludes newly blocked depositors and reincludes unblocked ones, and nothing else", () => {
+  const alice = "0xA11cE00000000000000000000000000000000001";
+  const bob = "0xB0B0000000000000000000000000000000000002";
+  const carol = "0xCa20100000000000000000000000000000000003";
+  // Bob is blocked now; Carol was excluded and is authorized again; deposit 3 is Bob's, already excluded.
+  const synced = { depositors: [alice, bob, carol, bob, alice], excluded: [2, 3] };
+  const blocked = new Set([bob.toLowerCase()]);
+  const plan = tempo.planSweep(synced, (a) => !blocked.has(a.toLowerCase()));
+  assert.deepEqual(plan, { exclude: [1], reinclude: [2] });
+  assert.deepEqual(tempo.planSweep(synced, () => true), { exclude: [], reinclude: [2, 3] });
+  assert.deepEqual(tempo.planSweep({ depositors: [], excluded: [] }, () => false), { exclude: [], reinclude: [] });
+
+  const pool = "0x7228B24c607151E74DBCb4Ad818B87cd993a64E9";
+  const calls = tempo.sweepCalls({ pool, ...plan });
+  assert.deepEqual(calls.map((c) => c.to), [pool, pool]);
+  assert.equal(calls[0].data.slice(0, 10), toFunctionSelector("exclude(uint256)"));
+  assert.equal(calls[1].data.slice(0, 10), toFunctionSelector("reinclude(uint256)"));
+  assert.equal(BigInt(`0x${calls[0].data.slice(10)}`), 1n);
 });
 
 test("the Solana PDAs are the ones already on devnet", () => {
