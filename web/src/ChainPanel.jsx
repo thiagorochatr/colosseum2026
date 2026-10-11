@@ -104,11 +104,13 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
     try {
       await fn(entry.step);
       entry.finish();
-      await refresh();
     } catch (e) {
       entry.fail(e.message);
       setError(e.message);
     } finally {
+      // A failed action can still have changed the chain, as when the keeper
+      // excludes a deposit before its withdrawal is refused.
+      await refresh();
       setBusy(null);
     }
   }
@@ -161,12 +163,13 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
 
   const block = (address, blocked) =>
     run(blocked ? `Unblock ${short(address)}` : `Block ${short(address)}`, (step) => (blocked ? chain.unblock(address, step) : chain.block(address, step)));
+  const restrict = (address) => run(`Block ${short(address)} in TIP-403 only`, (step) => chain.restrict(address, step));
+  const sweep = () => run("Keeper", (step) => chain.sweep(step));
 
   const blockedAddresses = new Set(
-    chain.id === "solana"
-      ? pool?.blocklist ?? []
-      : (pool?.deposits ?? []).filter((d) => !d.clean).map((d) => d.depositor.toLowerCase()),
+    chain.id === "solana" ? pool?.blocklist ?? [] : (pool?.blocked ?? []).map((a) => a.toLowerCase()),
   );
+  const pending = (pool?.deposits ?? []).filter((d) => d.pending).length;
   const isBlocked = (a) => blockedAddresses.has(chain.id === "solana" ? a : a.toLowerCase());
   const depositors = [...new Set((pool?.deposits ?? []).map((d) => d.depositor))];
 
@@ -237,6 +240,9 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
                         <button onClick={settleBatch} disabled={!!busy}>Settle the batch</button>
                       </>
                     )}
+                    {st?.label === "Blocked, not yet excluded" && (
+                      <p className="hint bad">The issuer blocked this depositor, but no keeper has excluded the deposit yet. A withdrawal runs the keeper first, so it will be refused.</p>
+                    )}
                     {st?.label === "Excluded" && <p className="hint bad">The depositor was blocked, so this deposit is outside the clean set. No valid proof exists for it.</p>}
                   </li>
                 );
@@ -290,12 +296,19 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
                           <Link href={chain.addressLink(d.depositor)}>{short(d.depositor)}</Link>
                           {d.depositor === chain.me && <span className="you"> you</span>}
                         </td>
-                        <td>{d.uncurated ? <Chip tone="wait">pending</Chip> : d.clean ? <Chip tone="good">in</Chip> : <Chip tone="bad">excluded</Chip>}</td>
+                        <td>
+                          {d.uncurated ? <Chip tone="wait">pending</Chip> : d.pending ? <Chip tone="wait">blocked, still in</Chip> : d.clean ? <Chip tone="good">in</Chip> : <Chip tone="bad">excluded</Chip>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
                 <p className="hint">Anyone can see who deposited. Nobody can see which deposit a withdrawal spends.</p>
+                {pending > 0 && (
+                  <p className="hint bad">
+                    {pending === 1 ? "One deposit's depositor is" : `${pending} deposits' depositors are`} blocked by the token's policy but still in the clean set. Any keeper can exclude them, and the relayer does before every withdrawal.
+                  </p>
+                )}
               </>
             )}
           </section>
@@ -307,12 +320,25 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
               {depositors.map((a) => (
                 <li key={a} className="row">
                   <span className="mono">{short(a)}{a === chain.me && <span className="you"> you</span>}</span>
-                  <button className={isBlocked(a) ? "" : "danger"} onClick={() => block(a, isBlocked(a))} disabled={!!busy}>
-                    {isBlocked(a) ? "Unblock" : "Block"}
-                  </button>
+                  <span className="row">
+                    {chain.restrict && !isBlocked(a) && (
+                      <button className="link" onClick={() => restrict(a)} disabled={!!busy}>TIP-403 only</button>
+                    )}
+                    <button className={isBlocked(a) ? "" : "danger"} onClick={() => block(a, isBlocked(a))} disabled={!!busy}>
+                      {isBlocked(a) ? "Unblock" : "Block"}
+                    </button>
+                  </span>
                 </li>
               ))}
             </ul>
+            {chain.sweep && (
+              <>
+                <p className="hint">
+                  "TIP-403 only" blocks the address in the token's policy and leaves the pool alone, as an issuer that has never heard of this pool would. The keeper then applies the policy: anyone can run it, since the pool checks every exclusion against the registry.
+                </p>
+                <button onClick={sweep} disabled={!!busy}>Run the keeper</button>
+              </>
+            )}
           </section>
 
         </div>
