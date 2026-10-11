@@ -58,7 +58,7 @@ export function tempoChain(cfg) {
 
     async deposit(step) {
       const note = createNote({ chain: "tempo", network: "moderato", pool: cfg.pool, denomination: BigInt(cfg.denomination) });
-      step("Created a secret note in this browser", { detail: "Two random field elements, k and r. They never leave this browser.", done: true });
+      step("Created a withdrawal key in this browser", { detail: "Two random field elements, k and r. They stay in this browser unless you download the key.", done: true });
       const commitment = await commitmentOf(note);
       step("Computed the commitment", { detail: [["C = Poseidon(k, r, denomination)", field(commitment)]], done: true });
       step("Sending one Tempo batch transaction: approve the pool, then deposit");
@@ -100,7 +100,7 @@ export function tempoChain(cfg) {
       const received = unit(BigInt(cfg.denomination) - fee);
       step(`Accepted: ${received} paid to ${short(recipient)} and ${unit(fee)} to the relayer`, {
         tx: out.tx,
-        detail: "The nullifier is now spent, so this note can never be withdrawn again.",
+        detail: "The nullifier is now spent, so this withdrawal key can never be used again.",
         done: true,
       });
       return { tx: out.tx, received };

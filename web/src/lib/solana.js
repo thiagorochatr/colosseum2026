@@ -70,7 +70,7 @@ export function solanaChain(cfg) {
 
     async deposit(step) {
       const note = createNote({ chain: "solana", network: "devnet", pool: cfg.pool, denomination: BigInt(cfg.denomination) });
-      step("Created a secret note in this browser", { detail: "Two random field elements, k and r. They never leave this browser.", done: true });
+      step("Created a withdrawal key in this browser", { detail: "Two random field elements, k and r. They stay in this browser unless you download the key.", done: true });
       const commitment = await commitmentOf(note);
       step("Computed the commitment", { detail: [["C = Poseidon(k, r, denomination)", field(commitment)]], done: true });
       step("Sending Deposit to the compliant pool, which runs mirror-pool's own deposit");

@@ -48,7 +48,7 @@ export function downloadNote(note) {
   const blob = new Blob([serializeNote(note)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `note-${note.chain}-${String(note.k).slice(0, 8)}.json`;
+  a.download = `withdrawal-key-${note.chain}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
 }

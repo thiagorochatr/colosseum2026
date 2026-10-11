@@ -168,12 +168,12 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
             <h2>2 · Deposit</h2>
             <p>Every deposit is exactly {chain.denominationLabel}, so withdrawals cannot be matched to deposits by amount.</p>
             <button className="primary" onClick={deposit} disabled={!!busy}>Deposit {chain.denominationLabel}</button>
-            <p className="hint">This creates a secret note in your browser. Whoever holds the note can withdraw the deposit.</p>
+            <p className="hint">This creates a withdrawal key in your browser. Whoever holds the key can withdraw the deposit.</p>
           </section>
 
           <section className="card">
-            <h2>3 · Your notes</h2>
-            {notes.length === 0 && <p className="muted">No notes yet.</p>}
+            <h2>3 · Your withdrawal keys</h2>
+            {notes.length === 0 && <p className="muted">No withdrawal keys yet.</p>}
             <ul className="notes">
               {notes.map((note, i) => {
                 const st = statuses[i];
@@ -182,7 +182,7 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
                     <div className="row">
                       <span>Deposit #{st?.index >= 0 ? st.index : "…"}</span>
                       {st && <Chip tone={st.tone}>{st.label}</Chip>}
-                      <button className="link" onClick={() => downloadNote(note)}>Download note</button>
+                      <button className="link" onClick={() => downloadNote(note)}>Download key</button>
                     </div>
                     {st?.canWithdraw && withdrawing !== i && (
                       <button onClick={() => startWithdraw(i)} disabled={!!busy}>Withdraw…</button>
