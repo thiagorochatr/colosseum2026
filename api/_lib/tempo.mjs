@@ -1,5 +1,6 @@
-// Tempo actions: test funds, the relayer, and the issuer blocking or
-// unblocking a depositor. The pool and the token's policy do the enforcing.
+// Tempo actions: test funds, the relayer, the keeper's sweep, and the issuer
+// blocking or unblocking a depositor. The pool and the token's policy do the
+// enforcing.
 
 import { createPublicClient, defineChain, http } from "viem";
 import { tempoModerato } from "viem/chains";
@@ -23,6 +24,19 @@ async function sendCalls(client, calls) {
   return receipt.transactionHash;
 }
 
+/**
+ * The keeper's rule, sent by the relayer's key: exclude every deposit whose
+ * depositor the token's current policy blocks, reinclude every one it allows
+ * again. exclude and reinclude are permissionless and the pool checks each
+ * against the registry, so any key could send this.
+ */
+async function sweep() {
+  const plan = await T.readSweep(publicClient, { pool: TEMPO.pool, token: TEMPO.token, fromBlock: TEMPO.deployBlock });
+  const calls = T.sweepCalls({ pool: TEMPO.pool, ...plan });
+  const tx = calls.length ? await sendCalls(wallet(relayerKey()), calls) : null;
+  return { tx, excluded: plan.exclude, reincluded: plan.reinclude };
+}
+
 export const tempoActions = {
   /** Gas stablecoins from Moderato's faucet, and Demo USD from the issuer. */
   async faucet({ address }) {
@@ -40,15 +54,39 @@ export const tempoActions = {
     const fee = BigInt(req.fee);
     if (fee < BigInt(TEMPO.fee)) throw new Error(`fee below ${TEMPO.fee}`);
     if (!isAddress(req.recipient)) throw new Error("recipient is not an address");
+    // Apply the issuer's current policy first: a depositor it blocks after the
+    // proof was made is excluded before the withdrawal can land.
+    const swept = await sweep();
     const account = Account.fromSecp256k1(relayerKey());
     const args = [
       req.a.map(BigInt), req.b.map((row) => row.map(BigInt)), req.c.map(BigInt),
       BigInt(req.poolRoot), BigInt(req.cleanRoot), BigInt(req.nullifierHash), req.recipient, account.address, fee,
     ];
-    await publicClient.simulateContract({ account, address: TEMPO.pool, abi: T.POOL_ABI, functionName: "withdraw", args });
+    try {
+      await publicClient.simulateContract({ account, address: TEMPO.pool, abi: T.POOL_ABI, functionName: "withdraw", args });
+    } catch (e) {
+      // Name the pool's error, such as StaleCleanRoot, so the client can act on it.
+      const name = e.walk?.((x) => x.data?.errorName)?.data?.errorName;
+      throw new Error(name ? `the pool refused the withdrawal: ${name}` : (e.shortMessage ?? e.message), { cause: e });
+    }
     const receipt = await wallet(relayerKey()).writeContractSync({ address: TEMPO.pool, abi: T.POOL_ABI, functionName: "withdraw", args });
     if (receipt.status !== "success") throw new Error(`reverted: ${receipt.transactionHash}`);
-    return { tx: receipt.transactionHash };
+    return { tx: receipt.transactionHash, swept };
+  },
+
+  /** Anyone's keeper: brings the clean set in line with the token's current policy. */
+  sweep: () => sweep(),
+
+  /**
+   * The issuer blocks an address in the TIP-403 registry only, the way an
+   * issuer that has never heard of this pool would. The pool's clean set is
+   * left to the keeper.
+   */
+  async restrict({ address }) {
+    if (!isAddress(address)) throw new Error("not an address");
+    const { encodeFunctionData } = await import("viem");
+    const data = encodeFunctionData({ abi: T.REGISTRY_ABI, functionName: "modifyPolicyBlacklist", args: [BigInt(TEMPO.policy), address, true] });
+    return { tx: await sendCalls(issuer(), [{ to: T.REGISTRY, data }]) };
   },
 
   /** The issuer blocks an address and excludes its clean deposits, in one batch transaction. */
