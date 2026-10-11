@@ -19,6 +19,15 @@ This is hackathon software running on test networks: Tempo's Moderato testnet an
 
 A second workflow checks the networks themselves, daily and on every push to `main`. Moderato and devnet run byte for byte what this repository builds. The ceremony's beacon is the announced Solana mainnet blockhash.
 
+## Known dependency advisories
+
+`npm audit` still reports advisories in three dependency chains. None of them is reached with input an attacker controls.
+
+- **elliptic and the ethers v5 packages**, through circomlibjs. This project uses circomlibjs only for the Poseidon hash. The ethers code it carries, for signing and providers, is never called. elliptic has no patched release.
+- **uuid and stream-json**, through jayson in @solana/web3.js 1.x. They parse JSON-RPC responses from this project's own RPC endpoint. Only @solana/web3.js 3 drops them, and that is a rewrite of the client API.
+
+The Rust tree is checked by `cargo deny` instead, and its one exception is written down in [solana/deny.toml](solana/deny.toml).
+
 ## Reporting a vulnerability
 
 Please report privately, through GitHub's **Report a vulnerability** button on this repository's Security tab. Do not open a public issue. Reports in English or Portuguese are welcome.
