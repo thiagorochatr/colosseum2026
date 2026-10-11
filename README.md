@@ -1,4 +1,4 @@
-# Hackathon Colosseum Worl's Fair 2026
+# Hackathon Colosseum World's Fair 2026
 
 [![CI](https://github.com/thiagorochatr/colosseum2026/actions/workflows/ci.yml/badge.svg)](https://github.com/thiagorochatr/colosseum2026/actions/workflows/ci.yml) [![On-chain](https://github.com/thiagorochatr/colosseum2026/actions/workflows/onchain.yml/badge.svg)](https://github.com/thiagorochatr/colosseum2026/actions/workflows/onchain.yml)
 
