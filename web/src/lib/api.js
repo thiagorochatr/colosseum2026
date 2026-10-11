@@ -13,3 +13,7 @@ export async function getConfig() {
 
 export const PROVING = { wasm: "/zk/withdraw.wasm", zkey: "/zk/withdraw_final.zkey" };
 export const short = (s, n = 4) => (s ? `${s.slice(0, n + 2)}…${s.slice(-n)}` : "");
+
+/** A field element as 0x-prefixed hex, shortened for the protocol log. */
+export const field = (x) => short(`0x${BigInt(x).toString(16).padStart(64, "0")}`, 6);
+export const indices = (list) => (list.length ? list.map((i) => `#${i}`).join(", ") : "none");

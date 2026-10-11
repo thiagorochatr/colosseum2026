@@ -14,18 +14,68 @@ function Link({ href, children }) {
   );
 }
 
-export default function ChainPanel({ chain, copy }) {
+const now = () => new Date().toLocaleTimeString();
+const settle = (steps, state) => steps.map((x) => (x.state === "running" ? { ...x, state } : x));
+
+/** One entry of the protocol log: an action and every step it went through. */
+function LogEntry({ entry, chain }) {
+  return (
+    <li className={`entry ${entry.state}`}>
+      <div className="row entry-head">
+        <strong>{entry.title}</strong>
+        <span className="muted">{entry.at}</span>
+        {entry.state === "failed" && <Chip tone="bad">failed</Chip>}
+      </div>
+      <ol className="steps">
+        {entry.steps.map((x, i) => (
+          <li key={i} className={`step ${x.state}`}>
+            <span className="mark" aria-hidden="true">{x.state === "running" ? <span className="spinner small" /> : x.state === "failed" ? "✕" : "✓"}</span>
+            <div>
+              <span>{x.text}</span> {x.tx && <Link href={chain.txLink(x.tx)}>transaction</Link>}
+              {typeof x.detail === "string" && <p className="hint">{x.detail}</p>}
+              {Array.isArray(x.detail) && (
+                <dl className="kv">
+                  {x.detail.map(([k, v]) => (
+                    <div key={k}>
+                      <dt>{k}</dt>
+                      <dd className="mono">{String(v)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </div>
+          </li>
+        ))}
+        {entry.error && <li className="step failed"><span className="mark">✕</span><div>{entry.error}</div></li>}
+      </ol>
+    </li>
+  );
+}
+
+export default function ChainPanel({ chain, copy, log, updateLog }) {
   const [balance, setBalance] = useState("…");
   const [pool, setPool] = useState(null);
   const [notes, setNotes] = useState(() => loadNotes(chain.id));
   const [statuses, setStatuses] = useState([]);
   const [busy, setBusy] = useState(null);
-  const [log, setLog] = useState([]);
   const [error, setError] = useState(null);
   const [withdrawing, setWithdrawing] = useState(null);
   const [recipient, setRecipient] = useState("");
 
-  const say = (text, tx) => setLog((l) => [{ text, tx, at: new Date().toLocaleTimeString() }, ...l].slice(0, 12));
+  // Each action opens a log entry; the chain adapter narrates its steps into it.
+  function begin(title) {
+    const id = `${Date.now()}-${Math.random()}`;
+    const edit = (fn) => updateLog(chain.id, (l) => l.map((e) => (e.id === id ? fn(e) : e)));
+    updateLog(chain.id, (l) => [{ id, title, at: now(), state: "running", steps: [] }, ...l].slice(0, 20));
+    return {
+      step(text, { detail, tx, done = false } = {}) {
+        if (!done) setBusy(text);
+        edit((e) => ({ ...e, steps: [...settle(e.steps, "done"), { text, detail, tx, state: done ? "done" : "running" }] }));
+      },
+      finish: () => edit((e) => ({ ...e, state: "done", steps: settle(e.steps, "done") })),
+      fail: (error) => edit((e) => ({ ...e, state: "failed", error, steps: settle(e.steps, "failed") })),
+    };
+  }
 
   const refresh = useCallback(async () => {
     try {
@@ -47,27 +97,25 @@ export default function ChainPanel({ chain, copy }) {
   async function run(label, fn) {
     setBusy(label);
     setError(null);
+    const entry = begin(label);
     try {
-      await fn();
+      await fn(entry.step);
+      entry.finish();
       await refresh();
     } catch (e) {
+      entry.fail(e.message);
       setError(e.message);
     } finally {
       setBusy(null);
     }
   }
 
-  const faucet = () =>
-    run("Requesting test funds", async () => {
-      const r = await chain.faucet();
-      say(r.note ?? "Test funds received", r.tx);
-    });
+  const faucet = () => run("Test funds", (step) => chain.faucet(step));
 
   const deposit = () =>
-    run("Depositing", async () => {
-      const { note, tx } = await chain.deposit();
+    run(`Deposit ${chain.denominationLabel}`, async (step) => {
+      const { note } = await chain.deposit(step);
       addNote(chain.id, note);
-      say(`Deposited ${chain.denominationLabel}. The note is saved in this browser.`, tx);
     });
 
   const startWithdraw = (i) => {
@@ -76,29 +124,15 @@ export default function ChainPanel({ chain, copy }) {
   };
 
   const withdraw = (note) =>
-    run("Withdrawing", async () => {
-      const out = await chain.withdraw(note, recipient, pool, (stage) => setBusy(stage));
+    run("Withdraw", async (step) => {
+      await chain.withdraw(note, recipient, pool, step);
       setWithdrawing(null);
-      if (chain.id === "solana" && !out.settled) {
-        say(`Spent. It pays ${short(recipient)} once another withdrawal joins the batch: the pool settles crowds of at least two.`, out.tx);
-      } else {
-        say(`Withdrawn: ${out.received} paid to ${short(recipient)}, a fresh address.`, out.tx);
-        if (out.settled) say("The batch settled, paying every pending withdrawal at once.", out.settled.tx);
-      }
     });
 
-  const settleBatch = () =>
-    run("Settling", async () => {
-      const r = await chain.settle();
-      if (r.settled) say(`The batch settled: ${r.settled} withdrawals paid at once.`, r.tx);
-      else say(`Not yet: ${r.pending} withdrawal waiting, and the pool needs at least ${r.floor} to settle.`);
-    });
+  const settleBatch = () => run("Settle the batch", (step) => chain.settle(step));
 
   const block = (address, blocked) =>
-    run(blocked ? "Unblocking" : "Blocking", async () => {
-      const r = blocked ? await chain.unblock(address) : await chain.block(address);
-      say(blocked ? `Unblocked ${short(address)}.` : `Blocked ${short(address)}: their deposits left the clean set.`, r.tx);
-    });
+    run(blocked ? `Unblock ${short(address)}` : `Block ${short(address)}`, (step) => (blocked ? chain.unblock(address, step) : chain.block(address, step)));
 
   const blockedAddresses = new Set(
     chain.id === "solana"
@@ -178,6 +212,15 @@ export default function ChainPanel({ chain, copy }) {
               })}
             </ul>
           </section>
+          <section className="card">
+            <h2>Protocol log</h2>
+            {log.length === 0 && <p className="muted">Every step of every action appears here: what was computed in this browser, what each transaction did, and what the chain checked.</p>}
+            <ol className="log">
+              {log.map((entry) => (
+                <LogEntry key={entry.id} entry={entry} chain={chain} />
+              ))}
+            </ol>
+          </section>
         </div>
 
         <div className="col">
@@ -226,17 +269,6 @@ export default function ChainPanel({ chain, copy }) {
             </ul>
           </section>
 
-          <section className="card">
-            <h2>Activity</h2>
-            {log.length === 0 && <p className="muted">Transactions from this session appear here.</p>}
-            <ul className="log">
-              {log.map((l, i) => (
-                <li key={i}>
-                  <span className="muted">{l.at}</span> {l.text} {l.tx && <Link href={chain.txLink(l.tx)}>view transaction</Link>}
-                </li>
-              ))}
-            </ul>
-          </section>
         </div>
       </div>
     </main>

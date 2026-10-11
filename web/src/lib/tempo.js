@@ -9,7 +9,7 @@ import * as T from "compliance-sdk/tempo";
 import { commitmentOf, nullifierOf, circuitNote } from "compliance-sdk/note";
 import { prove, toSolidity } from "compliance-sdk/prove";
 import { burner, createNote } from "./store.js";
-import { post, PROVING } from "./api.js";
+import { post, PROVING, short, field, indices } from "./api.js";
 
 export function tempoChain(cfg) {
   const publicClient = createPublicClient({ chain: tempoModerato, transport: http(cfg.rpc) });
@@ -31,7 +31,11 @@ export function tempoChain(cfg) {
       const v = await publicClient.readContract({ address: cfg.token, abi: T.TIP20_ABI, functionName: "balanceOf", args: [me] });
       return unit(v);
     },
-    faucet: () => post("/api/tempo/faucet", { address: me }),
+    async faucet(step) {
+      step("Asking the demo service for test dUSD");
+      const r = await post("/api/tempo/faucet", { address: me });
+      step(r.note ? "This wallet already has enough test dUSD" : `The demo issuer minted ${unit(r.minted)} to this wallet`, { tx: r.tx, done: true });
+    },
 
     /** Every deposit, with its depositor and whether it is clean. */
     async pool() {
@@ -52,28 +56,72 @@ export function tempoChain(cfg) {
       return { index, label: "Clean", tone: "good", canWithdraw: true };
     },
 
-    async deposit() {
+    async deposit(step) {
       const note = createNote({ chain: "tempo", network: "moderato", pool: cfg.pool, denomination: BigInt(cfg.denomination) });
-      const calls = T.depositCalls({ pool: cfg.pool, token: cfg.token, denomination: cfg.denomination, commitment: await commitmentOf(note) });
+      step("Created a secret note in this browser", { detail: "Two random field elements, k and r. They never leave this browser.", done: true });
+      const commitment = await commitmentOf(note);
+      step("Computed the commitment", { detail: [["C = Poseidon(k, r, denomination)", field(commitment)]], done: true });
+      step("Sending one Tempo batch transaction: approve the pool, then deposit");
+      const calls = T.depositCalls({ pool: cfg.pool, token: cfg.token, denomination: cfg.denomination, commitment });
       const r = await wallet.sendTransactionSync({ calls });
       if (r.status !== "success") throw new Error("the deposit reverted");
+      step(`The pool took ${unit(cfg.denomination)} and appended C to the pool tree and the clean tree`, {
+        tx: r.transactionHash,
+        detail: "The token's TIP-403 policy checked that this wallet is an authorized sender.",
+        done: true,
+      });
       return { note, tx: r.transactionHash };
     },
 
     freshRecipient: () => privateKeyToAddress(generatePrivateKey()),
 
-    async withdraw(note, recipient, pool, onStage) {
+    async withdraw(note, recipient, pool, step) {
       const fee = BigInt(cfg.fee);
       const { index } = await this.noteStatus(note, pool);
-      onStage("Proving in your browser");
+      const { leaves, excluded } = pool.synced;
+      step("Rebuilt both trees from the pool's events", {
+        detail: [["deposits", leaves.length], ["excluded by the policy", indices(excluded)], ["your deposit", `#${index}`]],
+        done: true,
+      });
       const b = T.binding({ chainId: cfg.chainId, pool: cfg.pool, recipient, relayer: cfg.relayer, fee });
-      const { proof, input } = await prove({ note: circuitNote(note), index, poolLeaves: pool.synced.leaves, excluded: pool.synced.excluded, binding: b }, PROVING);
-      onStage("Sending to the relayer");
+      step("Bound the proof to this exact withdrawal", {
+        detail: [["recipient", short(recipient)], ["relayer", short(cfg.relayer)], ["fee", unit(fee)], ["binding", field(b)]],
+        done: true,
+      });
+      step("Generating the Groth16 proof in this browser");
+      const t0 = performance.now();
+      const { proof, input } = await prove({ note: circuitNote(note), index, poolLeaves: leaves, excluded, binding: b }, PROVING);
+      step(`Proof ready in ${((performance.now() - t0) / 1000).toFixed(1)} s. It reveals only its four public inputs`, {
+        detail: [["pool root", field(input.poolRoot)], ["clean root", field(input.cleanRoot)], ["nullifier hash", field(input.nullifierHash)], ["binding", field(input.binding)]],
+        done: true,
+      });
+      step("The relayer submits withdraw. The pool checks both roots, the nullifier and the proof");
       const out = await post("/api/tempo/relay", T.relayRequest({ proof: toSolidity(proof), input, recipient, fee }));
-      return { tx: out.tx, received: unit(BigInt(cfg.denomination) - fee) };
+      const received = unit(BigInt(cfg.denomination) - fee);
+      step(`Accepted: ${received} paid to ${short(recipient)} and ${unit(fee)} to the relayer`, {
+        tx: out.tx,
+        detail: "The nullifier is now spent, so this note can never be withdrawn again.",
+        done: true,
+      });
+      return { tx: out.tx, received };
     },
 
-    block: (address) => post("/api/tempo/block", { address }),
-    unblock: (address) => post("/api/tempo/unblock", { address }),
+    async block(address, step) {
+      step(`The issuer adds ${short(address)} to the TIP-403 blacklist and calls exclude, in one batch transaction`);
+      const r = await post("/api/tempo/block", { address });
+      step(`Excluded ${indices(r.excluded)} from the clean set`, {
+        tx: r.tx,
+        detail: "The clean epoch moved forward, so the pool now rejects every older clean root.",
+        done: true,
+      });
+      return r;
+    },
+
+    async unblock(address, step) {
+      step(`The issuer removes ${short(address)} from the blacklist and calls reinclude`);
+      const r = await post("/api/tempo/unblock", { address });
+      step(`Reincluded ${indices(r.reincluded)} in the clean set`, { tx: r.tx, done: true });
+      return r;
+    },
   };
 }

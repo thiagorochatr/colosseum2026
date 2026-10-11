@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getConfig } from "./lib/api.js";
 import { tempoChain } from "./lib/tempo.js";
 import { solanaChain } from "./lib/solana.js";
@@ -23,27 +23,55 @@ const COPY = {
   },
 };
 
+// Each chain has its own route, /tempo and /solana. The root opens the last one visited.
+const CHAINS = Object.keys(COPY);
+const fromPath = () => {
+  const id = window.location.pathname.replace(/^\/+|\/+$/g, "");
+  return CHAINS.includes(id) ? id : null;
+};
+function lastVisited() {
+  try {
+    const id = localStorage.getItem("tab");
+    return CHAINS.includes(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const [config, setConfig] = useState(null);
   const [error, setError] = useState(null);
-  const [tab, setTab] = useState(() => {
-    try {
-      return localStorage.getItem("tab") ?? "tempo";
-    } catch {
-      return "tempo";
-    }
-  });
+  const [tab, setTab] = useState(() => fromPath() ?? lastVisited() ?? "tempo");
+  // The protocol log of each chain survives switching routes.
+  const [logs, setLogs] = useState(() => Object.fromEntries(CHAINS.map((id) => [id, []])));
+  const updateLog = useCallback((id, fn) => setLogs((all) => ({ ...all, [id]: fn(all[id]) })), []);
 
   useEffect(() => {
     getConfig().then(setConfig, (e) => setError(e.message));
   }, []);
   useEffect(() => {
+    if (fromPath() !== tab) window.history.replaceState(null, "", `/${tab}`);
+    const onPop = () => setTab(fromPath() ?? "tempo");
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+    // Runs once: later changes go through go(), which pushes the route itself.
+  }, []);
+  useEffect(() => {
+    document.title = `${COPY[tab].tab} · Private payments that keep the issuer's rules`;
     try {
       localStorage.setItem("tab", tab);
     } catch {
-      // Storage can be blocked; remembering the tab is only a convenience.
+      // Storage can be blocked; remembering the route is only a convenience.
     }
   }, [tab]);
+
+  const go = (id) => (event) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+    event.preventDefault();
+    if (id === tab) return;
+    window.history.pushState(null, "", `/${id}`);
+    setTab(id);
+  };
 
   const chains = useMemo(() => (config ? { tempo: tempoChain(config.tempo), solana: solanaChain(config.solana) } : null), [config]);
 
@@ -57,18 +85,18 @@ export default function App() {
         </p>
       </header>
 
-      <nav className="tabs" role="tablist">
+      <nav className="tabs" aria-label="Chain">
         {Object.entries(COPY).map(([id, c]) => (
-          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "tab on" : "tab"} onClick={() => setTab(id)}>
+          <a key={id} href={`/${id}`} aria-current={tab === id ? "page" : undefined} className={tab === id ? "tab on" : "tab"} onClick={go(id)}>
             <span className="tab-title">{c.tab}</span>
             <span className="tab-sub">{c.sub}</span>
-          </button>
+          </a>
         ))}
       </nav>
 
       {error && <div className="card error">The demo service is not reachable: {error}</div>}
       {!config && !error && <div className="card muted">Loading…</div>}
-      {chains && <ChainPanel key={tab} chain={chains[tab]} copy={COPY[tab]} />}
+      {chains && <ChainPanel key={tab} chain={chains[tab]} copy={COPY[tab]} log={logs[tab]} updateLog={updateLog} />}
 
       <footer className="foot">
         <span>Same circuit and verifying key on both chains · Groth16 over BN254 · keys from a public ceremony</span>

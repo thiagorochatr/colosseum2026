@@ -7,7 +7,7 @@ import * as S from "compliance-sdk/solana";
 import { commitmentOf, nullifierOf, circuitNote } from "compliance-sdk/note";
 import { prove } from "compliance-sdk/prove";
 import { burner, createNote } from "./store.js";
-import { post, PROVING } from "./api.js";
+import { post, PROVING, short, field, indices } from "./api.js";
 
 const hex = (u) => Array.from(u, (b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -32,7 +32,11 @@ export function solanaChain(cfg) {
     addressLink: (a) => `${cfg.explorer}/address/${a}${cluster}`,
 
     balance: async () => unit(await connection.getBalance(kp.publicKey)),
-    faucet: () => post("/api/solana/faucet", { address: me }),
+    async faucet(step) {
+      step("Asking the demo service for devnet SOL");
+      const r = await post("/api/solana/faucet", { address: me });
+      step(r.note ? "This wallet already has enough devnet SOL" : `The demo relay sent ${unit(r.sent)} to this wallet`, { tx: r.tx, done: true });
+    },
 
     async pool() {
       const [s, set] = await Promise.all([S.syncPool(connection, program, pool), S.readCleanSet(connection, compliance, curator, pool)]);
@@ -64,29 +68,57 @@ export function solanaChain(cfg) {
       return { index, label: "Clean", tone: "good", canWithdraw: true };
     },
 
-    async deposit() {
+    async deposit(step) {
       const note = createNote({ chain: "solana", network: "devnet", pool: cfg.pool, denomination: BigInt(cfg.denomination) });
-      const tx = new Transaction().add(S.instructions.deposit(program, kp.publicKey, pool, await commitmentOf(note)));
+      step("Created a secret note in this browser", { detail: "Two random field elements, k and r. They never leave this browser.", done: true });
+      const commitment = await commitmentOf(note);
+      step("Computed the commitment", { detail: [["C = Poseidon(k, r, denomination)", field(commitment)]], done: true });
+      step("Sending Deposit to the compliant pool, which runs mirror-pool's own deposit");
+      const tx = new Transaction().add(S.instructions.deposit(program, kp.publicKey, pool, commitment));
       const sig = await connection.sendTransaction(tx, [kp]);
       await connection.confirmTransaction(sig, "confirmed");
-      // The curator publishes a clean root that covers the new deposit.
-      await post("/api/solana/publish", {});
+      step(`The pool escrowed ${unit(cfg.denomination)} and appended C to its tree`, { tx: sig, done: true });
+      step("The curator applies its policy and publishes a clean root that covers the new deposit");
+      const r = await post("/api/solana/publish", {});
+      step(`Curator published the clean root for ${r.depositCount} deposits`, {
+        tx: r.tx,
+        detail: [["excluded by the policy", indices(r.excluded)], ["one transaction", "UpdatePolicy, PublishRoot, and a memo with the clean set and the policy"]],
+        done: true,
+      });
       return { note, tx: sig };
     },
 
     freshRecipient: () => Keypair.generate().publicKey.toBase58(),
 
-    async withdraw(note, recipient, p, onStage) {
+    async withdraw(note, recipient, p, step) {
       const fee = BigInt(cfg.fee);
       const { index } = await this.noteStatus(note, p);
       const set = p.cleanSet;
-      onStage("Proving in your browser");
+      step("Rebuilt the pool from devnet history and checked the curator's memo", {
+        detail: [
+          ["deposits covered", set.depositCount],
+          ["excluded by the policy", indices(set.excluded)],
+          ["policy", "its sha256 matches the hash in the curator account"],
+          ["your deposit", `#${index}`],
+        ],
+        done: true,
+      });
       const binding = S.actionBinding({ beneficiary: new PublicKey(recipient).toBytes(), relay: new PublicKey(cfg.relay).toBytes(), relayFee: fee });
+      step("Bound the proof to this exact withdrawal", {
+        detail: [["beneficiary", short(recipient)], ["relay", short(cfg.relay)], ["fee", unit(fee)], ["binding", field(binding)]],
+        done: true,
+      });
+      step("Generating the Groth16 proof in this browser");
+      const t0 = performance.now();
       const { proof, input } = await prove(
         { note: circuitNote(note), index, poolLeaves: p.synced.leaves.slice(0, set.depositCount), excluded: set.excluded, binding },
         PROVING,
       );
-      onStage("Clearing and spending through the relay");
+      step(`Proof ready in ${((performance.now() - t0) / 1000).toFixed(1)} s. It reveals only its four public inputs`, {
+        detail: [["pool root", field(input.poolRoot)], ["clean root", field(input.cleanRoot)], ["nullifier hash", field(input.nullifierHash)], ["binding", field(input.binding)]],
+        done: true,
+      });
+      step("The relay sends one transaction: VerifyClearance, then SubmitClearedSpend");
       const s = S.toSolana(proof);
       const out = await post("/api/solana/relay", {
         proof: { a: hex(s.a), b: hex(s.b), c: hex(s.c) },
@@ -94,12 +126,44 @@ export function solanaChain(cfg) {
         beneficiary: recipient,
         fee: fee.toString(),
       });
-      return { tx: out.tx, settled: out.settled, pending: out.pending, received: unit(BigInt(cfg.denomination) - fee) };
+      const received = unit(BigInt(cfg.denomination) - fee);
+      step("The compliance program verified the proof and wrote a public clearance. The pool accepted the spend", {
+        tx: out.tx,
+        detail: "The clearance and the spend share one slot, so a clearance can never outlive a curator's revocation.",
+        done: true,
+      });
+      if (out.settled) {
+        step(`The batch settled: ${out.settled.settled} withdrawals paid at once, ${received} of them to ${short(recipient)}`, { tx: out.settled.tx, done: true });
+      } else {
+        step(`Waiting for the batch: ${out.pending} spend pending. The pool pays crowds of at least two, all at one timestamp`, { done: true });
+      }
+      return { tx: out.tx, settled: out.settled, pending: out.pending, received };
     },
 
-    settle: () => post("/api/solana/settle", {}),
+    async settle(step) {
+      step("Asking the relay to settle the pending batch");
+      const r = await post("/api/solana/settle", {});
+      if (r.settled) step(`The batch settled: ${r.settled} withdrawals paid at once`, { tx: r.tx, done: true });
+      else step(`Not yet: ${r.pending} spend pending, and the pool needs at least ${r.floor} or its timeout`, { done: true });
+      return r;
+    },
 
-    block: (address) => post("/api/solana/block", { address }),
-    unblock: (address) => post("/api/solana/unblock", { address }),
+    async block(address, step) {
+      step(`The curator blocks ${short(address)}: Revoke, UpdatePolicy, PublishRoot and a memo, in one transaction`);
+      const r = await post("/api/solana/block", { address });
+      step(`New epoch: every older clean root is revoked. Excluded ${indices(r.excluded)}`, {
+        tx: r.tx,
+        detail: [["clean set", `${r.depositCount} deposits, excluded ${indices(r.excluded)}`]],
+        done: true,
+      });
+      return r;
+    },
+
+    async unblock(address, step) {
+      step(`The curator publishes a policy without ${short(address)} and a new clean root`);
+      const r = await post("/api/solana/unblock", { address });
+      step(`Published: excluded ${indices(r.excluded)}`, { tx: r.tx, done: true });
+      return r;
+    },
   };
 }
