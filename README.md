@@ -23,6 +23,7 @@ Work in progress.
 | `mirror-pool/` | Prior work, imported unchanged. See below. |
 | `docs/SPEC.md` | The protocol: notes, trees, circuit, bindings, and each chain's contracts. |
 | `docs/THREAT_MODEL.md` | Who can do what, and the known limits. |
+| `docs/LIMITS_AND_FAQ.md` | What this does not do, and answers to the questions it is most often asked. |
 | `circuits/` | The withdraw circuit, frozen, with its tests. |
 | `tools/vectors/` | Test vectors for the circuit, computed with `mirror-core`. |
 | `solana/` | The compliance program, the compliant pool around mirror-pool, the client and curator CLI. Live on devnet. |

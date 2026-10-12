@@ -9,7 +9,7 @@ Status: **draft**, Phase 1. Finalized once the build is done.
 - **Relayer:** submits a withdrawal for a fee.
 - **Issuer:** sets the token's TIP-403 policy, on Tempo.
 - **Curator:** publishes clean roots, on Solana.
-- **Keeper:** calls `exclude` when a policy changes, on Tempo.
+- **Keeper:** calls `exclude` and `reinclude` when a policy changes, on Tempo. Anyone can run one; `tempo/keeper/keeper.mjs` is ours.
 - **Observer:** sees the chain.
 
 ## What stays private
@@ -41,4 +41,4 @@ Status: **draft**, Phase 1. Finalized once the build is done.
 4. **Small anonymity sets.** A fixed denomination and a young pool give a small set. Timing and amount correlation shrink it further.
 5. **Curator trust on Solana.** The curator decides what clean means. The policy document is published and hashed on-chain, but applying it is the curator's job.
 6. **Note reuse.** The nullifier is not separated by pool or chain. A client that reuses `k` links its notes.
-7. **Upgradeability and audits.** Programs and contracts are deployed upgradeable on test networks and are not audited.
+7. **Upgradeability and audits.** The Solana programs are deployed upgradeable on devnet. The Tempo pool has no owner and cannot be upgraded. Nothing is audited.
