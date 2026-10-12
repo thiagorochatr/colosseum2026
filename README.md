@@ -14,7 +14,7 @@ A user proves that their deposit belongs to a **clean set** without revealing wh
 
 **Try it:** [colosseum2026.vercel.app](https://colosseum2026.vercel.app). It runs on Tempo's Moderato testnet and Solana devnet, with a throwaway test wallet in the browser. Deposit, prove in the browser and withdraw to a fresh address, or play the issuer or the curator and block a depositor.
 
-Work in progress.
+Testnet only, not audited.
 
 ## How it works
 
