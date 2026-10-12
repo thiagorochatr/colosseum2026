@@ -12,10 +12,8 @@ class Fallback extends Component {
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div className="page">
-        <div className="card error">
-          The page failed to load: {this.state.error.message}. Your withdrawal keys are still stored in this browser. Reload, or open the page in another browser and import a downloaded key.
-        </div>
+      <div className="notice error">
+        The page failed to load: {this.state.error.message}. Your withdrawal keys are still stored in this browser. Reload, or open the page in another browser and import a downloaded key.
       </div>
     );
   }

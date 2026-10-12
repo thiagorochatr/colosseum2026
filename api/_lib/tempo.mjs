@@ -131,19 +131,6 @@ export const tempoActions = {
   /** Anyone's keeper: brings the clean set in line with the token's current policy. */
   sweep: () => sweep(),
 
-  /**
-   * The issuer blocks an address in the TIP-403 registry only, the way an
-   * issuer that has never heard of this pool would. The pool's clean set is
-   * left to the keeper.
-   */
-  async restrict({ address }) {
-    if (!isAddress(address)) throw new Error("not an address");
-    if (isProtected(address)) throw new Error("the demo's own accounts cannot be blocked");
-    const { encodeFunctionData } = await import("viem");
-    const data = encodeFunctionData({ abi: T.REGISTRY_ABI, functionName: "modifyPolicyBlacklist", args: [await policyId(), address, true] });
-    return { tx: await sendCalls(issuer(), [{ to: T.REGISTRY, data }]) };
-  },
-
   /** The issuer blocks an address and excludes its clean deposits, in one batch transaction. */
   async block({ address }) {
     if (!isAddress(address)) throw new Error("not an address");

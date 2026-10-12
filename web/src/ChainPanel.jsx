@@ -6,9 +6,9 @@ function Chip({ tone, children }) {
   return <span className={`chip ${tone ?? ""}`}>{children}</span>;
 }
 
-function Link({ href, children }) {
+function Link({ href, children, className }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer">
+    <a href={href} target="_blank" rel="noreferrer" className={className}>
       {children}
     </a>
   );
@@ -16,20 +16,23 @@ function Link({ href, children }) {
 
 const now = () => new Date().toLocaleTimeString();
 const settle = (steps, state) => steps.map((x) => (x.state === "running" ? { ...x, state } : x));
+// The page reads the chain again on its own this often, while it is visible and idle.
+const POLL = 30_000;
 
-/** One entry of the protocol log: an action and every step it went through. */
+/** One entry of the live log: an action and every step it went through. */
 function LogEntry({ entry, chain }) {
   return (
     <li className={`entry ${entry.state}`}>
-      <div className="row entry-head">
+      <div className="entry-head">
+        <span className="entry-time">{entry.at}</span>
         <strong>{entry.title}</strong>
-        <span className="muted">{entry.at}</span>
+        {entry.state === "running" && <span className="spinner small" />}
         {entry.state === "failed" && <Chip tone="bad">failed</Chip>}
       </div>
       <ol className="steps">
         {entry.steps.map((x, i) => (
           <li key={i} className={`step ${x.state}`}>
-            <span className="mark" aria-hidden="true">{x.state === "running" ? <span className="spinner small" /> : x.state === "failed" ? "✕" : "✓"}</span>
+            <span className="mark" aria-hidden="true">{x.state === "running" ? "•" : x.state === "failed" ? "✕" : "✓"}</span>
             <div>
               <span>{x.text}</span>
               {(x.tx || x.accounts) && (
@@ -40,7 +43,7 @@ function LogEntry({ entry, chain }) {
                   ))}
                 </p>
               )}
-              {typeof x.detail === "string" && <p className="hint">{x.detail}</p>}
+              {typeof x.detail === "string" && <p className="detail">{x.detail}</p>}
               {Array.isArray(x.detail) && (
                 <dl className="kv">
                   {x.detail.map(([k, v]) => (
@@ -54,18 +57,31 @@ function LogEntry({ entry, chain }) {
             </div>
           </li>
         ))}
-        {entry.error && <li className="step failed"><span className="mark">✕</span><div>{entry.error}</div></li>}
+        {entry.error && (
+          <li className="step failed">
+            <span className="mark">✕</span>
+            <div>{entry.error}</div>
+          </li>
+        )}
       </ol>
     </li>
   );
 }
 
-export default function ChainPanel({ chain, copy, log, updateLog }) {
+/** Where a deposit stands, for its tile in the pool and its label. */
+function depositState(d) {
+  if (d.uncurated) return { tone: "wait", label: "awaiting the curator" };
+  if (d.pending) return { tone: "wait", label: "blocked, not yet excluded" };
+  return d.clean ? { tone: "good", label: "in the clean set" } : { tone: "bad", label: "excluded" };
+}
+
+export default function ChainPanel({ chain, copy, log, updateLog, onStatus }) {
   const [balance, setBalance] = useState("…");
   const [pool, setPool] = useState(null);
   const [notes, setNotes] = useState(() => loadNotes(chain.id));
   const [statuses, setStatuses] = useState([]);
   const [busy, setBusy] = useState(null);
+  const [read, setRead] = useState(null);
   const [error, setError] = useState(null);
   const [withdrawing, setWithdrawing] = useState(null);
   const [recipient, setRecipient] = useState("");
@@ -75,11 +91,13 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
   // Keys offered as a file in this visit, awaiting the user's word that the file saved.
   const [offered, setOffered] = useState(() => new Set());
 
+  useEffect(() => onStatus({ busy, read, network: chain.network }), [busy, read, chain, onStatus]);
+
   // Each action opens a log entry; the chain adapter narrates its steps into it.
   function begin(title) {
     const id = `${Date.now()}-${Math.random()}`;
     const edit = (fn) => updateLog(chain.id, (l) => l.map((e) => (e.id === id ? fn(e) : e)));
-    updateLog(chain.id, (l) => [{ id, title, at: now(), state: "running", steps: [] }, ...l].slice(0, 20));
+    updateLog(chain.id, (l) => [{ id, title, at: now(), state: "running", steps: [] }, ...l].slice(0, 30));
     return {
       step(text, { detail, tx, accounts, done = false } = {}) {
         if (!done) setBusy(text);
@@ -104,6 +122,7 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
       setPool(p);
       setNotes(n);
       setStatuses(s);
+      setRead(now());
     } catch (e) {
       if (!quiet && mine === latest.current) setError(e.message);
     }
@@ -111,6 +130,16 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
 
   useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  // Others use the pool too: keep reading it while the page is open, but never during an action.
+  const idle = useRef(true);
+  idle.current = !busy;
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (idle.current && document.visibilityState === "visible") refresh({ quiet: true });
+    }, POLL);
+    return () => clearInterval(timer);
   }, [refresh]);
 
   async function run(label, fn) {
@@ -137,7 +166,7 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
   const deposit = () =>
     run(`Deposit ${chain.denominationLabel}`, async (step) => {
       await chain.deposit(step, (note) => addNote(chain.id, note));
-      step("Download the withdrawal key below. It is the only way to withdraw this deposit, from this browser or any other", { done: true });
+      step("Download the withdrawal key in step 3. It is the only way to withdraw this deposit, from this browser or any other", { done: true });
     });
 
   const save = (note) => {
@@ -194,79 +223,91 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
 
   const block = (address, blocked) =>
     run(blocked ? `Unblock ${short(address)}` : `Block ${short(address)}`, (step) => (blocked ? chain.unblock(address, step) : chain.block(address, step)));
-  const restrict = (address) => run(`Block ${short(address)} in TIP-403 only`, (step) => chain.restrict(address, step));
-  const sweep = () => run("Keeper", (step) => chain.sweep(step));
 
   const blockedAddresses = new Set(
     chain.id === "solana" ? pool?.blocklist ?? [] : (pool?.blocked ?? []).map((a) => a.toLowerCase()),
   );
-  const pending = (pool?.deposits ?? []).filter((d) => d.pending).length;
   const isBlocked = (a) => blockedAddresses.has(chain.id === "solana" ? a : a.toLowerCase());
-  const depositors = [...new Set((pool?.deposits ?? []).map((d) => d.depositor))];
+  const deposits = pool?.deposits ?? [];
+  // Tempo addresses compare without case; Solana keys are base58, where case matters.
+  const mine = (a) => (chain.id === "solana" ? a === chain.me : a.toLowerCase() === chain.me.toLowerCase());
+  const depositors = [...new Set(deposits.map((d) => d.depositor))].map((a) => ({ address: a, indices: deposits.filter((d) => d.depositor === a).map((d) => d.index) }));
+  const count = (f) => deposits.filter(f).length;
+  const pending = count((d) => d.pending);
 
   return (
-    <main className="panel">
-      <section className="intro">
-        <p>{copy.lead}</p>
-        <p className="muted">{copy.how}</p>
-      </section>
+    <div className="board">
+      {/* Left: what this is, and the three steps a user takes. */}
+      <section className="col left">
+        <div className="intro">
+          <p className="eyebrow">{copy.tab} · {copy.sub}</p>
+          <h1>{copy.headline}</h1>
+          <p className="lead">{copy.lead}</p>
+          <p className="muted">{copy.how}</p>
+        </div>
 
-      {busy && <div className="card busy"><span className="spinner" /> {busy}…</div>}
-      {error && <div className="card error">{error}</div>}
+        {error && (
+          <div className="notice error">
+            <span>{error}</span>
+            <button className="link" onClick={() => setError(null)}>Dismiss</button>
+          </div>
+        )}
 
-      <div className="grid">
-        <div className="col">
-          <section className="card">
-            <h2>1 · Your test wallet</h2>
-            <p className="mono">
-              <Link href={chain.addressLink(chain.me)}>{short(chain.me, 6)}</Link>
-            </p>
-            <p className="big">{balance}</p>
+        <ol className="flow">
+          <li className="card">
+            <h2><span className="num">1</span> Your test wallet</h2>
+            <div className="row spread">
+              <Link className="mono" href={chain.addressLink(chain.me)}>{short(chain.me, 6)} ↗</Link>
+              <span className="big">{balance}</span>
+            </div>
             <button onClick={faucet} disabled={!!busy}>Get test funds</button>
             <p className="hint">A throwaway wallet that lives in this browser, on a test network.</p>
-          </section>
+          </li>
 
-          <section className="card">
-            <h2>2 · Deposit</h2>
-            <p>Every deposit is exactly {chain.denominationLabel}, so withdrawals cannot be matched to deposits by amount.</p>
+          <li className="card">
+            <h2><span className="num">2</span> Deposit</h2>
+            <p className="hint">Every deposit is exactly {chain.denominationLabel}, so withdrawals cannot be matched to deposits by amount. It creates a withdrawal key in your browser: whoever holds the key can withdraw, from any browser.</p>
             <button className="primary" onClick={deposit} disabled={!!busy}>Deposit {chain.denominationLabel}</button>
-            <p className="hint">This creates a withdrawal key in your browser. Whoever holds the key can withdraw the deposit, from any browser.</p>
-          </section>
+          </li>
 
-          <section className="card">
-            <h2>3 · Your withdrawal keys</h2>
-            {notes.length === 0 && <p className="muted">No withdrawal keys yet.</p>}
+          <li className="card">
+            <h2><span className="num">3</span> Withdraw</h2>
+            {notes.length === 0 && <p className="hint">Your withdrawal keys appear here after a deposit.</p>}
             <ul className="notes">
               {notes.map((note, i) => {
                 const st = statuses[i];
                 return (
                   <li key={i}>
-                    <div className="row">
-                      <span>{!st ? "Deposit #…" : st.index >= 0 ? `Deposit #${st.index}` : "Withdrawal key"}</span>
-                      {st && <Chip tone={st.tone}>{st.label}</Chip>}
-                      <button className={note.saved ? "link" : ""} onClick={() => save(note)}>Download key</button>
+                    <div className="row spread">
+                      <span className="row">
+                        <strong>{!st ? "Deposit #…" : st.index >= 0 ? `Deposit #${st.index}` : "Withdrawal key"}</strong>
+                        {st && <Chip tone={st.tone}>{st.label}</Chip>}
+                      </span>
+                      <span className="row">
+                        {st?.canWithdraw && withdrawing !== i && (
+                          <button className="primary small" onClick={() => startWithdraw(i)} disabled={!!busy}>Withdraw</button>
+                        )}
+                        <button className="small" onClick={() => save(note)}>Download key</button>
+                      </span>
                     </div>
                     {/* Kept for "Not deposited" too: a deposit whose confirmation was lost can still land. */}
                     {!note.saved && st?.label !== "Withdrawn" && (
                       offered.has(String(note.k)) ? (
                         <div className="row">
-                          <p className="hint">Did the file save? Check your downloads before you confirm.</p>
-                          <button onClick={() => confirmSaved(note)}>Yes, I have the file</button>
+                          <span className="hint">Did the file save? Check your downloads first.</span>
+                          <button className="link" onClick={() => confirmSaved(note)}>Yes, I have the file</button>
                         </div>
                       ) : (
-                        <p className="hint bad">Not backed up. This key exists only in this browser: if its data is cleared, the deposit cannot be withdrawn. Download it and keep the file safe.</p>
+                        <p className="hint bad">Not backed up: this key exists only in this browser. Download it and keep the file safe.</p>
                       )
                     )}
-                    {st?.canWithdraw && withdrawing !== i && (
-                      <button onClick={() => startWithdraw(i)} disabled={!!busy}>Withdraw…</button>
-                    )}
                     {withdrawing === i && (
-                      <div className="withdraw">
+                      <div className="form">
                         <label>
                           Pay to
                           <input className="mono" value={recipient} onChange={(e) => setRecipient(e.target.value)} />
                         </label>
-                        <p className="hint">Prefilled with a brand-new address that has never been on chain. Its key is not kept anywhere, so on this test network the payment only shows that it arrived; paste an address you control to keep it. The relayer pays the fee and takes it from the withdrawal.</p>
+                        <p className="hint">A brand-new address that has never been on chain; paste one you control to keep the payment. The relayer pays the network fee and takes its fee from the withdrawal.</p>
                         <div className="row">
                           <button className="primary" onClick={() => withdraw(note)} disabled={!!busy}>Prove and withdraw</button>
                           <button className="link" onClick={() => setWithdrawing(null)}>Cancel</button>
@@ -274,19 +315,19 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
                       </div>
                     )}
                     {st?.label === "Waiting for the batch" && chain.settle && (
-                      <>
-                        <p className="hint">The pool pays withdrawals in batches of at least two, so a single withdrawal cannot be timed back to its deposit. A lone one is paid once the pool's timeout has passed.</p>
-                        <button onClick={settleBatch} disabled={!!busy}>Settle the batch</button>
-                      </>
+                      <div className="row">
+                        <span className="hint">The pool pays in batches of at least two, so a withdrawal cannot be timed back to its deposit.</span>
+                        <button className="small" onClick={settleBatch} disabled={!!busy}>Settle the batch</button>
+                      </div>
                     )}
                     {st?.label === "Awaiting the curator" && chain.publish && (
-                      <>
-                        <p className="hint">The curator has not yet published a clean root that covers this deposit.</p>
-                        <button onClick={publishRoot} disabled={!!busy}>Ask the curator to publish</button>
-                      </>
+                      <div className="row">
+                        <span className="hint">No clean root covers this deposit yet.</span>
+                        <button className="small" onClick={publishRoot} disabled={!!busy}>Ask the curator to publish</button>
+                      </div>
                     )}
                     {st?.label === "Blocked, not yet excluded" && (
-                      <p className="hint bad">The issuer blocked this depositor, but no keeper has excluded the deposit yet. A withdrawal runs the keeper first, so it will be refused.</p>
+                      <p className="hint bad">The issuer blocked this depositor. A withdrawal applies the policy first, so it will be refused.</p>
                     )}
                     {st?.label === "Excluded" && <p className="hint bad">The depositor was blocked, so this deposit is outside the clean set. No valid proof exists for it.</p>}
                   </li>
@@ -297,97 +338,106 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
               <button className="link" onClick={() => setImporting(true)}>Import a withdrawal key…</button>
             )}
             {importing && (
-              <div className="withdraw">
-                <p className="hint">Deposited from another browser or device? Choose its key file, or paste the file's contents.</p>
+              <div className="form">
+                <p className="hint">Deposited from another browser? Choose its key file, or paste its contents.</p>
                 <input type="file" accept=".json,application/json" onChange={importFile} />
-                <textarea className="mono" rows={4} value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder='{ "version": 1, "chain": … }' />
+                <textarea className="mono" rows={3} value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder='{ "version": 1, "chain": … }' />
                 {importError && <p className="hint bad">{importError}</p>}
                 <div className="row">
-                  <button className="primary" onClick={() => importKey(pasted)} disabled={!pasted.trim()}>Import</button>
+                  <button className="primary small" onClick={() => importKey(pasted)} disabled={!pasted.trim()}>Import</button>
                   <button className="link" onClick={() => { setImporting(false); setImportError(null); }}>Cancel</button>
                 </div>
               </div>
             )}
-          </section>
-          <section className="card">
-            <h2>Protocol log</h2>
-            {log.length === 0 && <p className="muted">Every step of every action appears here: what was computed in this browser, what each transaction did, and what the chain checked.</p>}
-            <ol className="log">
-              {log.map((entry) => (
-                <LogEntry key={entry.id} entry={entry} chain={chain} />
-              ))}
-            </ol>
-          </section>
-        </div>
+          </li>
+        </ol>
 
-        <div className="col">
-          <section className="card">
+        <p className="foot">Same circuit and verifying key on both chains · Groth16 over BN254 · keys from a public ceremony</p>
+      </section>
+
+      {/* Center: the pool everyone shares, and who decides what is clean. */}
+      <section className="col center">
+        <div className="card">
+          <div className="row spread">
             <h2>The pool</h2>
-            {!pool && <p className="muted">Reading the chain…</p>}
-            {pool && (
-              <>
-                <p>
-                  {pool.deposits.length} deposits · {pool.deposits.filter((d) => d.clean).length} in the clean set
+            <Link className="small-link" href={chain.addressLink(chain.scope.pool)}>{short(chain.scope.pool)} ↗</Link>
+          </div>
+          {!pool && <p className="muted">Reading the chain…</p>}
+          {pool && (
+            <>
+              <div className="stats">
+                <div><span className="stat">{deposits.length}</span><span className="stat-label">deposits</span></div>
+                <div><span className="stat good">{count((d) => d.clean && !d.uncurated)}</span><span className="stat-label">in the clean set</span></div>
+                <div><span className="stat bad">{count((d) => !d.clean && !d.uncurated)}</span><span className="stat-label">excluded</span></div>
+                <div><span className="stat accent">{count((d) => mine(d.depositor))}</span><span className="stat-label">yours</span></div>
+              </div>
+              <div className="tiles">
+                {deposits.map((d) => {
+                  const s = depositState(d);
+                  return (
+                    <a
+                      key={d.index}
+                      className={`tile ${s.tone}${mine(d.depositor) ? " mine" : ""}`}
+                      href={chain.addressLink(d.depositor)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={`#${d.index} · deposited by ${d.depositor}${mine(d.depositor) ? " (you)" : ""} · ${s.label}`}
+                    >
+                      {d.index}
+                    </a>
+                  );
+                })}
+              </div>
+              <div className="legend">
+                <span><i className="sw good" /> in the clean set</span>
+                <span><i className="sw bad" /> excluded</span>
+                {count((d) => d.uncurated || d.pending) > 0 && <span><i className="sw wait" /> waiting</span>}
+                <span><i className="sw mine" /> yours</span>
+              </div>
+              <p className="hint">Anyone can see who deposited. Nobody can see which deposit a withdrawal spends.</p>
+              {pending > 0 && (
+                <p className="hint bad">
+                  {pending === 1 ? "One deposit's depositor is" : `${pending} deposits' depositors are`} blocked by the token's policy but still in the clean set. Every withdrawal applies the policy first.
                 </p>
-                <table>
-                  <thead>
-                    <tr><th>#</th><th>Depositor</th><th>Clean set</th></tr>
-                  </thead>
-                  <tbody>
-                    {pool.deposits.map((d) => (
-                      <tr key={d.index}>
-                        <td>{d.index}</td>
-                        <td className="mono">
-                          <Link href={chain.addressLink(d.depositor)}>{short(d.depositor)}</Link>
-                          {d.depositor === chain.me && <span className="you"> you</span>}
-                        </td>
-                        <td>
-                          {d.uncurated ? <Chip tone="wait">pending</Chip> : d.pending ? <Chip tone="wait">blocked, still in</Chip> : d.clean ? <Chip tone="good">in</Chip> : <Chip tone="bad">excluded</Chip>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <p className="hint">Anyone can see who deposited. Nobody can see which deposit a withdrawal spends.</p>
-                {pending > 0 && (
-                  <p className="hint bad">
-                    {pending === 1 ? "One deposit's depositor is" : `${pending} deposits' depositors are`} blocked by the token's policy but still in the clean set. Any keeper can exclude them, and the relayer does before every withdrawal.
-                  </p>
-                )}
-              </>
-            )}
-          </section>
-
-          <section className="card console">
-            <h2>{copy.consoleTitle}</h2>
-            <p className="muted">{copy.consoleHow}</p>
-            <ul className="depositors">
-              {depositors.map((a) => (
-                <li key={a} className="row">
-                  <span className="mono">{short(a)}{a === chain.me && <span className="you"> you</span>}</span>
-                  <span className="row">
-                    {chain.restrict && !isBlocked(a) && (
-                      <button className="link" onClick={() => restrict(a)} disabled={!!busy}>TIP-403 only</button>
-                    )}
-                    <button className={isBlocked(a) ? "" : "danger"} onClick={() => block(a, isBlocked(a))} disabled={!!busy}>
-                      {isBlocked(a) ? "Unblock" : "Block"}
-                    </button>
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {chain.sweep && (
-              <>
-                <p className="hint">
-                  "TIP-403 only" blocks the address in the token's policy and leaves the pool alone, as an issuer that has never heard of this pool would. The keeper then applies the policy: anyone can run it, since the pool checks every exclusion against the registry.
-                </p>
-                <button onClick={sweep} disabled={!!busy}>Run the keeper</button>
-              </>
-            )}
-          </section>
-
+              )}
+            </>
+          )}
         </div>
-      </div>
-    </main>
+
+        <div className="card">
+          <h2>{copy.consoleTitle}</h2>
+          <p className="hint">{copy.consoleHow}</p>
+          <ul className="depositors">
+            {depositors.map(({ address, indices }) => (
+              <li key={address} className="row spread">
+                <span className="row">
+                  <Link className="mono" href={chain.addressLink(address)}>{short(address)}</Link>
+                  {mine(address) && <span className="you">you</span>}
+                  <span className="hint inline">{indices.map((i) => `#${i}`).join(" ")}</span>
+                </span>
+                <button className={`small ${isBlocked(address) ? "" : "danger"}`} onClick={() => block(address, isBlocked(address))} disabled={!!busy}>
+                  {isBlocked(address) ? "Unblock" : "Block"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {/* Right: everything that happens, as it happens, with a link to every transaction. */}
+      <section className="col right">
+        <div className="card log-card">
+          <h2 className="row"><span className={`dot ${busy ? "busy" : "live"}`} /> Live log</h2>
+          {log.length === 0 && (
+            <p className="hint">Every step of every action appears here as it happens: what this browser computed, what each transaction did, and what the chain checked, with a link to the block explorer for each transaction and account.</p>
+          )}
+          <ol className="log">
+            {log.map((entry) => (
+              <LogEntry key={entry.id} entry={entry} chain={chain} />
+            ))}
+          </ol>
+        </div>
+      </section>
+    </div>
   );
 }

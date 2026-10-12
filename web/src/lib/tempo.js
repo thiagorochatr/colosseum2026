@@ -27,6 +27,7 @@ export function tempoChain(cfg) {
     scope,
     unit,
     denominationLabel: unit(cfg.denomination),
+    network: "Moderato testnet",
     txLink: (h) => `${cfg.explorer}/tx/${h}`,
     addressLink: (a) => `${cfg.explorer}/address/${a}`,
 
@@ -135,9 +136,9 @@ export function tempoChain(cfg) {
         step("The pool changed while proving, so the proof's root is no longer accepted. Proving again", { done: true });
         return this.withdraw(note, recipient, pool, step, true);
       }
-      if (out.swept?.tx) {
+      for (const tx of out.swept?.txs ?? []) {
         step("Before submitting, the relayer applied the policy too", {
-          tx: out.swept.tx,
+          tx,
           detail: [["excluded", indices(out.swept.excluded)], ["reincluded", indices(out.swept.reincluded)]],
           done: true,
         });
@@ -160,16 +161,6 @@ export function tempoChain(cfg) {
       step(changed ? "The keeper brought the clean set in line with the policy" : "The clean set already matches the policy", {
         tx: r.tx ?? undefined,
         detail: changed ? [["excluded", indices(r.excluded)], ["reincluded", indices(r.reincluded)]] : undefined,
-        done: true,
-      });
-      return r;
-    },
-
-    async restrict(address, step) {
-      step(`The issuer adds ${short(address)} to the TIP-403 blacklist, and nothing else`);
-      const r = await post("/api/tempo/restrict", { address });
-      step("Blocked in the token's policy. The token now refuses this address, but the pool's clean set still includes its deposits until a keeper applies the policy", {
-        tx: r.tx,
         done: true,
       });
       return r;

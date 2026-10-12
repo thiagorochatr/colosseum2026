@@ -32,6 +32,7 @@ export function solanaChain(cfg) {
     scope,
     unit,
     denominationLabel: unit(cfg.denomination),
+    network: "devnet",
     txLink: (s) => `${cfg.explorer}/tx/${s}${cluster}`,
     addressLink: (a) => `${cfg.explorer}/address/${a}${cluster}`,
 
