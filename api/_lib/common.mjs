@@ -10,6 +10,8 @@ import solanaPolicy from "../../solana/deployments/devnet-policy.json" with { ty
 export const TEMPO = {
   chainId: 42431,
   rpc: process.env.TEMPO_RPC ?? "https://rpc.moderato.tempo.xyz",
+  // What the browser gets: never the functions' own endpoint, which may carry a key.
+  browserRpc: process.env.TEMPO_BROWSER_RPC ?? "https://rpc.moderato.tempo.xyz",
   explorer: "https://explore.testnet.tempo.xyz",
   pool: tempoDeployment.pool,
   deployBlock: tempoDeployment.deployBlock,
@@ -64,7 +66,8 @@ export function reply(res, code, value) {
 export function actions(table) {
   return async function handler(req, res) {
     const action = req.query?.action ?? new URL(req.url, "http://x").pathname.split("/").pop();
-    const run = table[action];
+    // Own keys only: "constructor" or "toString" must not resolve as actions.
+    const run = Object.hasOwn(table, action) ? table[action] : undefined;
     if (!run) return reply(res, 404, { error: `unknown action ${action}` });
     if (req.method !== "POST") return reply(res, 405, { error: "POST only" });
     try {

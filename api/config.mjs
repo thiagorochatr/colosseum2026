@@ -10,7 +10,7 @@ export default function handler(req, res) {
     // The browser gets only its own RPC endpoint, never the functions' key.
     const { initialBlocklist: _, rpc: _server, browserRpc, ...solana } = SOLANA;
     reply(res, 200, {
-      tempo: { ...TEMPO, relayer: relayerAddress() },
+      tempo: (({ rpc: _server, browserRpc, ...tempo }) => ({ ...tempo, rpc: browserRpc, relayer: relayerAddress() }))(TEMPO),
       solana: { ...solana, rpc: browserRpc, relay: relayAddress() },
     });
   } catch (e) {

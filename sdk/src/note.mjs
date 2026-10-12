@@ -54,5 +54,10 @@ export function parseNote(text) {
   for (const f of ["chain", "network", "pool", "denomination", "k", "r"]) {
     if (n[f] === undefined) throw new Error(`note is missing ${f}`);
   }
-  return { ...n, denomination: BigInt(n.denomination), k: BigInt(n.k), r: BigInt(n.r) };
+  const k = BigInt(n.k);
+  const r = BigInt(n.r);
+  // k and k + p hash alike, so a value outside the field would be a second name for the same note.
+  if (k < 0n || k >= FIELD || r < 0n || r >= FIELD) throw new Error("note secrets must be field elements");
+  if (!["tempo", "solana"].includes(n.chain)) throw new Error(`unknown chain ${n.chain}`);
+  return { ...n, denomination: BigInt(n.denomination), k, r };
 }

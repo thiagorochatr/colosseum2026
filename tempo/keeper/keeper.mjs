@@ -25,7 +25,7 @@ const { token } = readState("issuer");
 const key = process.env.KEEPER_KEY ?? demoKeys().relayer;
 const at = () => new Date().toISOString().slice(11, 19);
 
-/** One sweep: read the plan, and send it as one batch transaction if it has work. */
+/** One sweep: read the plan, and send it in batches of up to four calls if it has work. */
 export async function sweepOnce() {
   const plan = await T.readSweep(publicClient, { pool, token, fromBlock: deployBlock });
   const batches = T.sweepBatches({ pool, ...plan });
@@ -44,6 +44,7 @@ export async function sweepOnce() {
 if (import.meta.url === `file://${process.argv[1]}`) {
   let depositors = new Set();
   let running = Promise.resolve();
+  let failed = false;
   // Sweeps run one at a time; a sweep that fails, say on a race with another
   // keeper, is logged and retried on the next event or tick.
   const sweep = (why) =>
@@ -53,12 +54,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         depositors = new Set(r.depositors.map((d) => d.toLowerCase()));
         if (!r.tx && why !== "tick") console.log(`${at()} ${why}: the clean set already matches the policy`);
       } catch (e) {
+        failed = true;
         console.error(`${at()} sweep failed (${why}): ${e.shortMessage ?? e.message}`);
       }
     }));
 
   await sweep("start");
-  if (process.argv.includes("--once")) process.exit(0);
+  // With --once, a failed sweep exits non-zero so a scheduler can see it.
+  if (process.argv.includes("--once")) process.exit(failed ? 1 : 0);
 
   console.log(`${at()} watching the TIP-403 registry for ${depositors.size} depositors of ${pool}`);
   // Polls getLogs block by block: Moderato's RPC does not keep the event

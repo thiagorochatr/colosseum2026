@@ -4,7 +4,7 @@
 //   node curator.mjs publish           rebuild the pool, apply the current policy, publish the clean root
 //   node curator.mjs block <address>   add a depositor to the blocklist: new epoch, new policy, new root
 //   node curator.mjs unblock <address> remove a depositor from the blocklist
-//   node curator.mjs revoke            start a new epoch, invalidating every root so far
+//   node curator.mjs revoke            start a new epoch, invalidating every root so far, and publish a fresh one
 //
 // Every publication writes, in one transaction, the policy's hash, the clean
 // root and a memo carrying the policy document and the clean set. The genesis
@@ -70,10 +70,14 @@ export async function unblock(address) {
   return publish((await currentBlocklist()).filter((a) => a !== address));
 }
 
+/**
+ * A new epoch, invalidating every root so far, with a fresh root under the
+ * same policy in the same transaction. A revoke alone would leave no root in
+ * the current epoch, so no memo could be accepted and every later curator
+ * action would fail closed.
+ */
 export async function revoke() {
-  const { compliance } = programs();
-  const curator = curatorKeypair();
-  return { sig: await send([ixs.revoke(compliance, curator.publicKey)], [curator]) };
+  return publish(await currentBlocklist(), { revoke: true });
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

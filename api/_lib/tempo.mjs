@@ -87,21 +87,26 @@ export const tempoActions = {
     const points = [req.a, ...(Array.isArray(req.b) ? req.b : [null]), req.c];
     if (!Array.isArray(req.b) || req.b.length !== 2 || !points.every((p) => Array.isArray(p) && p.length === 2 && p.every(isUint))) throw new Error("malformed proof");
     if (![req.poolRoot, req.cleanRoot, req.nullifierHash].every(isUint)) throw new Error("malformed public inputs");
-    // Apply the issuer's current policy first: a depositor it blocks after the
-    // proof was made is excluded before the withdrawal can land.
-    const swept = await sweepBeforeRelay();
     const account = Account.fromSecp256k1(relayerKey());
     const args = [
       req.a.map(BigInt), req.b.map((row) => row.map(BigInt)), req.c.map(BigInt),
       BigInt(req.poolRoot), BigInt(req.cleanRoot), BigInt(req.nullifierHash), req.recipient, account.address, fee,
     ];
-    try {
-      await publicClient.simulateContract({ account, address: TEMPO.pool, abi: T.POOL_ABI, functionName: "withdraw", args });
-    } catch (e) {
-      // Name the pool's error, such as StaleCleanRoot, so the client can act on it.
-      const name = e.walk?.((x) => x.data?.errorName)?.data?.errorName;
-      throw new Error(name ? `the pool refused the withdrawal: ${name}` : (e.shortMessage ?? e.message), { cause: e });
-    }
+    const simulate = async () => {
+      try {
+        await publicClient.simulateContract({ account, address: TEMPO.pool, abi: T.POOL_ABI, functionName: "withdraw", args });
+      } catch (e) {
+        // Name the pool's error, such as StaleCleanRoot, so the client can act on it.
+        const name = e.walk?.((x) => x.data?.errorName)?.data?.errorName;
+        throw new Error(name ? `the pool refused the withdrawal: ${name}` : (e.shortMessage ?? e.message), { cause: e });
+      }
+    };
+    // A request that would fail anyway costs nothing: simulate before sweeping.
+    await simulate();
+    // Apply the issuer's current policy: a depositor it blocks after the proof
+    // was made is excluded before the withdrawal can land. Then check again.
+    const swept = await sweepBeforeRelay();
+    await simulate();
     const receipt = await wallet(relayerKey()).writeContractSync({ address: TEMPO.pool, abi: T.POOL_ABI, functionName: "withdraw", args });
     if (receipt.status !== "success") throw new Error(`reverted: ${receipt.transactionHash}`);
     return { tx: receipt.transactionHash, swept };
@@ -127,18 +132,34 @@ export const tempoActions = {
   async block({ address }) {
     if (!isAddress(address)) throw new Error("not an address");
     if (isProtected(address)) throw new Error("the demo's own accounts cannot be blocked");
-    const synced = await T.syncPool(publicClient, { pool: TEMPO.pool, fromBlock: TEMPO.deployBlock });
-    const indices = synced.depositors
-      .map((d, i) => (d.toLowerCase() === address.toLowerCase() && !synced.excluded.includes(i) ? i : -1))
-      .filter((i) => i >= 0);
+    const clean = async () => {
+      const synced = await T.syncPool(publicClient, { pool: TEMPO.pool, fromBlock: TEMPO.deployBlock });
+      return synced.depositors
+        .map((d, i) => (d.toLowerCase() === address.toLowerCase() && !synced.excluded.includes(i) ? i : -1))
+        .filter((i) => i >= 0);
+    };
     // The block and the first three excludes go in one batch, closing the race
     // for them; any further excludes follow in batches of four, since each
-    // costs about 1.5M gas.
-    const [first, ...rest] = [indices.slice(0, 3), ...chunks(indices.slice(3), 4)];
-    let tx = await sendCalls(issuer(), T.blockAndExcludeCalls({ pool: TEMPO.pool, policy: await policyId(), account: address, indices: first }));
-    for (const part of rest) tx = await sendCalls(issuer(), T.sweepCalls({ pool: TEMPO.pool, exclude: part, reinclude: [] }));
+    // costs about 1.5M gas. If a keeper excluded one of them first, the batch
+    // reverts with AlreadyExcluded: plan again once from the new state.
+    let indices = await clean();
+    const blockWith = async (first) => sendCalls(issuer(), T.blockAndExcludeCalls({ pool: TEMPO.pool, policy: await policyId(), account: address, indices: first }));
+    let tx;
+    try {
+      tx = await blockWith(indices.slice(0, 3));
+    } catch {
+      indices = await clean();
+      tx = await blockWith(indices.slice(0, 3));
+    }
+    const rest = indices.slice(3);
+    if (rest.length) {
+      // The address is blocked now, so the keeper's sweep finishes the job and re-plans if raced.
+      const swept = await sweep();
+      tx = swept.tx ?? tx;
+    }
     return { tx, excluded: indices };
   },
+
 
   /** The issuer unblocks an address and its deposits are reincluded, in one batch transaction. */
   async unblock({ address }) {

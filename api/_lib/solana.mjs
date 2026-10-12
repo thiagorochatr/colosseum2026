@@ -68,18 +68,26 @@ async function pendingSpends(known = []) {
 }
 
 /**
- * The pending spends this relay can settle together: plain transfers at its
- * fee, to an ordinary beneficiary, its own `known` spends first. A spend paying
- * another fee, invoking a program, or naming the vault or another account the
- * pool cannot pay would make the whole batch fail, so it is left out.
+ * The pending spends this relay can settle together: its own plain transfers
+ * at its fee, its `known` spends first. A spend paying another fee, invoking a
+ * program, or naming an account the pool cannot pay would make the whole batch
+ * fail, so it is left out. Anyone can still settle those with the CLI.
  */
 async function settleable(known = []) {
   const fee = BigInt(SOLANA.fee);
   const banned = new Set(protectedKeys());
+  // Only spends this relay sent: it checked their beneficiaries. A spend sent
+  // straight to the program by anyone else could name one the pool cannot pay.
+  const mine = relay().publicKey.toBase58();
   const first = new Set(known.map((k) => k.toBase58()));
   const ok = (await pendingSpends(known)).filter(({ account: { data } }) => {
     const d = Buffer.from(data);
-    return d.readBigUInt64LE(16) === fee && d.readBigUInt64LE(8) === 0n && !banned.has(new PublicKey(d.subarray(32, 64)).toBase58());
+    return (
+      d.readBigUInt64LE(16) === fee &&
+      d.readBigUInt64LE(8) === 0n &&
+      new PublicKey(d.subarray(64, 96)).toBase58() === mine &&
+      !banned.has(new PublicKey(d.subarray(32, 64)).toBase58())
+    );
   });
   ok.sort((a, b) => Number(first.has(b.pubkey.toBase58())) - Number(first.has(a.pubkey.toBase58())));
   return ok.slice(0, MAX_BATCH);

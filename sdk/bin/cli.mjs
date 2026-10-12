@@ -4,8 +4,9 @@
 //   compliance note new  --chain tempo|solana --network <net> --out note.json
 //   compliance deposit   --note note.json  [--key 0x… | TEMPO_PRIVATE_KEY]  [--keypair id.json]
 //   compliance status    --note note.json
-//   compliance withdraw  --note note.json --to <address> [--relayer http://…] [--relay-keypair relay.json] [--fee n]
-//   compliance settle    --network <net> [--keypair id.json] [--allow-below-floor]      (Solana)
+//   compliance withdraw  --note note.json --to <address> [--relayer http://…] [--max-fee n]      (Tempo)
+//   compliance withdraw  --note note.json --to <pubkey> --relay-keypair relay.json [--fee n]   (Solana)
+//   compliance settle    --network <net> [--keypair id.json] [--fee n] [--allow-below-floor] (Solana: spends at --fee)
 //
 // Networks: tempo local|moderato, solana local|devnet. Addresses come from the
 // repository's deployments/ files. Proving uses circuits/build/withdraw_js/withdraw.wasm
@@ -68,6 +69,9 @@ async function tempoFind(ctx, note) {
 const tempo = {
   async deposit(note, opts) {
     const ctx = await tempoCtx(note.network);
+    if (note.pool.toLowerCase() !== ctx.dep.pool.toLowerCase()) throw new Error("this note is for another pool than the network's");
+    // A second deposit of one note shares its nullifier, so it could never be withdrawn.
+    if ((await tempoFind(ctx, note)).index >= 0) throw new Error("this note is already deposited; create a new one");
     const token = await ctx.read("token");
     const wallet = await tempoWallet(ctx.chain, opts.key ?? process.env.TEMPO_PRIVATE_KEY);
     const calls = T.depositCalls({ pool: ctx.dep.pool, token, denomination: note.denomination, commitment: await commitmentOf(note) });
@@ -136,6 +140,8 @@ const solana = {
   async deposit(note, opts) {
     const ctx = await solanaCtx(note.network);
     const kp = keypairFile(ctx.web3, opts.keypair);
+    // A second deposit of one note shares its nullifier, so it could never be withdrawn.
+    if ((await solanaFind(ctx, note)).index >= 0) throw new Error("this note is already deposited; create a new one");
     const pool = new ctx.web3.PublicKey(note.pool);
     const sig = await solanaSend(ctx, [S.instructions.deposit(ctx.program, kp.publicKey, pool, await commitmentOf(note))], [kp]);
     return { tx: link(ctx.net, sig) };
@@ -159,7 +165,17 @@ const solana = {
   async withdraw(note, opts) {
     const ctx = await solanaCtx(note.network);
     if (!ctx.set) throw new Error("the curator has no clean set in force for this pool; run the curator first");
+    // The relay signs the withdrawal in public. Defaulting to the wallet that
+    // deposited would sign both ends with one key and undo the privacy.
+    if (!opts["relay-keypair"]) throw new Error("pass --relay-keypair: a key that never touched this deposit");
     const relay = keypairFile(ctx.web3, opts["relay-keypair"]);
+    let wallet = null;
+    try {
+      wallet = keypairFile(ctx.web3, undefined).publicKey;
+    } catch {
+      // No default wallet on this machine: nothing to compare against.
+    }
+    if (wallet && relay.publicKey.equals(wallet)) throw new Error("the relay key is your default wallet; use a separate one");
     const fee = BigInt(opts.fee ?? 1_000_000);
     const { pool, synced, index } = await solanaFind(ctx, note);
     if (index < 0) throw new Error("this note was never deposited");
