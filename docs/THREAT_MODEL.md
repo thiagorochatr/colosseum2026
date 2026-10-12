@@ -1,6 +1,6 @@
 # Threat model
 
-Status: **draft**, Phase 1. Finalized once the build is done.
+Status: as built. The limits below are also listed, with what answers each, in [LIMITS_AND_FAQ.md](LIMITS_AND_FAQ.md).
 
 ## Actors
 
@@ -36,11 +36,13 @@ Status: **draft**, Phase 1. Finalized once the build is done.
 ## Known limits
 
 1. **Trusted setup.** Groth16 soundness rests on at least one honest contributor in the phase-2 ceremony and on the phase-1 file. A development key is forgeable and is never the final one.
-2. **Race on Tempo.** Between an address being blocked and `exclude` being called, its notes can still withdraw. The issuer closes the window by batching both in one transaction. A keeper narrows it otherwise.
+2. **Race on Tempo.** Between an address being blocked and `exclude` being called, its notes can still withdraw. The issuer closes the window by batching both in one transaction; the demo does this for up to three of the address's deposits and leaves the rest to its keeper's sweep. A keeper narrows it otherwise.
 3. **Exclusion is visible.** It reveals that a given depositor was blocked, which the issuer's public policy already shows.
 4. **Small anonymity sets.** A fixed denomination and a young pool give a small set. Timing and amount correlation shrink it further.
 5. **Curator trust on Solana.** The curator decides what clean means. The policy document is published and hashed on-chain, but applying it is the curator's job.
 6. **Note reuse.** The nullifier is not separated by pool or chain. A client that reuses `k` links its notes.
 7. **Timing exclusions.** Every exclusion starts a new epoch, so whoever decides when exclusions land, the issuer, the curator, or anyone able to call `exclude` on a deposit the policy already blocks, can make the proofs in flight stale. Clients prove again; nothing is lost but time.
 8. **Settlement after a block, on Solana.** A spend is checked when it is recorded and paid later in a batch, so a revoke between the two does not stop its payout.
-9. **Upgradeability and audits.** The Solana programs are deployed upgradeable on devnet. The Tempo pool has no owner and cannot be upgraded. Nothing is audited.
+9. **One pool per Solana deployment.** A curator's roots are not tied to a pool on chain, so the compliant pool serves exactly one, fixed at build time.
+10. **The demo's web app and service.** They are one deployment. Whoever controls it can serve a page that reads the withdrawal keys a browser stores or redirects deposits, though not take what is already in the pools.
+11. **Upgradeability and audits.** The Solana programs are deployed upgradeable on devnet. The Tempo pool has no owner and cannot be upgraded. Nothing is audited.

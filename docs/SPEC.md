@@ -30,7 +30,7 @@ A note is `(k, r, denom_tag)`, with `k` and `r` uniformly random field elements.
 
 - **Leaf:** `C = H3(k, r, denom_tag)`.
 - **Nullifier:** `N = H1(k)`.
-- **denom_tag:** the pool's denomination in base units, as a field element. On Solana that is lamports. On Tempo it is the token's 6-decimal units.
+- **denom_tag:** the pool's denomination in base units, as a field element. On Solana that is lamports. On Tempo it is the token's 6-decimal units. It is a convention clients follow, not a check: it is a private input that only enters the leaf, and neither chain can see inside a commitment. Each pool has its own tree, so a note under another tag simply withdraws that pool's denomination.
 
 Both formulas are `mirror-core`'s, unchanged, so existing `mirror-pool` notes remain spendable.
 
@@ -119,9 +119,9 @@ The roots and the domain strings differ between chains, so a proof made for one 
 **Functions:**
 
 - **`deposit(commitment)`**
-  1. Pulls `denomination` from `msg.sender` with `transferFrom`. The token's own policy already refuses an unauthorized sender.
-  2. Inserts `commitment` at index `i` in both trees and records `depositor[i] = msg.sender`.
-  3. Pushes both new roots.
+  1. Inserts `commitment` at index `i` in both trees and records `depositor[i] = msg.sender` and `commitmentAt[i]`.
+  2. Pushes both new roots.
+  3. Pulls `denomination` from `msg.sender` with `transferFrom`, the one external call, last. The token's own policy refuses an unauthorized sender, and a failed transfer reverts everything.
 - **`exclude(i)`**, callable by anyone.
   1. Requires that `i` exists, that `clean[i] != 0`, and that `isAuthorizedSender(token.transferPolicyId(), depositor[i])` is `false` in the TIP-403 registry. That is the same check the token applies to a sender.
   2. Sets `clean[i] = 0` and increments `cleanEpoch`, which invalidates every earlier clean root. It then pushes the new root.
@@ -130,6 +130,7 @@ The roots and the domain strings differ between chains, so a proof made for one 
   2. Restores `clean[i] = commitment[i]` and pushes the new root. Adding a leaf cannot help an excluded note, so the epoch does not move.
 - **`withdraw(proof, poolRoot, cleanRoot, nullifierHash, recipient, relayer, fee)`**
   1. Checks the request:
+     - `recipient` is not zero, and a nonzero `fee` names a `relayer`;
      - `poolRoot` is in the pool ring;
      - `cleanRoot` is in the clean ring and tagged with the current epoch;
      - `nullifierHash` is unspent;
@@ -172,7 +173,7 @@ A native program, in the same style as `mirror-pool`.
   3. Verifies the Groth16 proof with `groth16-solana` over the four public inputs.
   4. Writes the clearance account, keyed by pool, curator and nullifier. An existing clearance is always rewritten, never refused: a spend must consume its clearance in the slot it was written, so refusing one would let anyone who saw the proof freeze the note by writing it first, in an earlier slot or just ahead in the same one. A spent note gains nothing from a rewrite, since its spend record already exists. So a clearance records the latest verification; whether the note was spent is the spend record's to say.
 
-A clearance is public evidence. Anyone, such as an offramp, a DEX or a transfer hook, can check that a proof for nullifier `N` in pool `P`, bound to `binding`, verified under curator `C`'s clean root `R`. Together with the pool's spend record for `N`, it shows that the spend was cleared.
+A clearance is public evidence. Anyone, such as an offramp, a DEX or a transfer hook, can check that a proof for nullifier `N` in pool `P`, bound to `binding`, verified under curator `C`'s clean root `R`. Together with the pool's spend record for `N`, it shows that the spend was cleared. A clearance records the latest verification, and the note's owner can rewrite it after the spend with another proof, so a reader checks that its binding matches the spend record's beneficiary, relay and fee.
 
 ### 8.2 The compliant pool
 
@@ -188,7 +189,8 @@ A clearance is public evidence. Anyone, such as an offramp, a DEX or a transfer 
      - was issued **in this slot**;
      - carries the binding this spend recomputes, relay key included.
   3. It then writes the same spend record, so mirror-pool's `SettleEpoch` pays it out.
-- **One transaction:** a relay sends `VerifyClearance` and `SubmitClearedSpend` together. The same-slot rule means a clearance can never wait out a curator's revocation.
+- **One transaction:** a relay sends `VerifyClearance` and `SubmitClearedSpend` together. The same-slot rule means a clearance cannot be held across slots and used after a revocation. Within one slot it can: a `Revoke` landing between a `VerifyClearance` sent alone and a later `SubmitClearedSpend` in the same slot does not stop the spend, since the pool does not read the curator's epoch. And a spend, once recorded, is paid at settlement whatever the curator does next.
+- **One pool per deployment.** The compliant pool refuses to create any pool but the one of `MIRROR_DENOMINATION`, a compile-time constant, and pays only from that pool (error `107`). The curator's clean roots are not tied to a pool on chain, so a second pool under the same curator could prove its deposits against this pool's clean set: a deposit the curator never screened, holding the same commitment as a clean deposit here at the same index, would clear. Serving several pools needs one curator account per pool, which is on the roadmap.
 - **The curator is fixed per deployment.** The compliance program id and the required curator authority are compile-time constants, `MIRROR_COMPLIANCE_PROGRAM_ID` and `MIRROR_REQUIRED_CURATOR`. mirror-pool creates pools permissionlessly and names them by denomination alone, so a curator chosen per pool would let anyone take a denomination with a curator of their own.
 - **The compliance program does not check the pool's owner.** A clearance names the pool account it was verified against, and a pool accepts only clearances naming itself. A fake pool account yields a clearance for a different address, which no pool consumes. A test checks exactly this.
 
@@ -217,7 +219,7 @@ A clearance is public evidence. Anyone, such as an offramp, a DEX or a transfer 
 - **Proving:** snarkjs with the circuit's `wasm` and the final `zkey`, in the browser or in Node.
 - **Verifying key:** both verifiers are generated from one `vk.json` by `circuits/scripts/regenerate-verifiers.sh`, which prints its sha256. CI regenerates both on every push and fails if either differs from the committed file, which is the check that the two chains verify the same statement.
 
-## 10. Confirmed in Phase 3
+## 10. Confirmed on the real networks
 
 1. **Policy getter.** A TIP-20 token reports its policy with `transferPolicyId()`. A new token defaults to policy `1`, always-allow. Tokens are created with `TIP20_FACTORY.createToken(name, symbol, currency, quoteToken, admin, salt)` at `0x20Fc000000000000000000000000000000000000`. The interfaces come from `tempo-std` v0.1.6.
 2. **Policy checks.** `isAuthorizedSender` flips when an address is blacklisted, when it leaves a whitelist, and through the sender part of a compound policy. The token itself refuses a blocked sender and a blocked recipient. All of this is tested against Tempo's precompiles with `forge test --network tempo`.
