@@ -1,6 +1,6 @@
 # Specification
 
-Status: **frozen for implementation**, Phase 1. Items marked *open* are confirmed during Phase 3 and do not change the protocol below.
+Status: the protocol as built and deployed. Section 10 records what was confirmed on the real networks.
 
 ## 1. What this is
 
@@ -8,7 +8,7 @@ A compliance layer for private pools. A withdrawer proves, in zero knowledge, th
 
 | | Tempo | Solana |
 |---|---|---|
-| Pool | new: a fixed-denomination TIP-20 pool | `mirror-pool`, adapted |
+| Pool | new: a fixed-denomination TIP-20 pool | `mirror-pool`, unchanged, behind a wrapper that pays only against a clearance |
 | Who decides what is clean | the token issuer's TIP-403 policy, read on-chain | a curator, who publishes the clean root |
 | Who updates the clean set | anyone, checked on-chain against the policy | the curator |
 | Verification | Solidity verifier inside the pool | a separate compliance program that writes a clearance |

@@ -28,7 +28,7 @@ Work in progress.
 | `tools/vectors/` | Test vectors for the circuit, computed with `mirror-core`. |
 | `solana/` | The compliance program, the compliant pool around mirror-pool, the client and curator CLI. Live on devnet. |
 | `sdk/` | Trees, circuit inputs, proving, and each chain's binding and proof layout. |
-| `web/` | The app: one tab per chain. |
+| `web/` | The app, one page per chain: [/tempo](https://colosseum2026.vercel.app/tempo) and [/solana](https://colosseum2026.vercel.app/solana). |
 | `api/` | The demo service as Vercel functions: faucet, relayer, issuer and curator, holding the test-network keys. |
 | `tempo/` | The private stablecoin pool, its tests, the relayer and the end-to-end flow. Live on Moderato. |
 | `.github/workflows/` | CI on every push, and a daily check that both networks run this source. See [SECURITY.md](SECURITY.md). |

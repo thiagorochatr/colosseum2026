@@ -25,6 +25,8 @@ forge test --network tempo
 | `script/Deploy.s.sol` | Deploys the verifier and a pool, and records the addresses. |
 | `e2e/` | The issuer's setup and the full flow on a real node. |
 | `relayer/relayer.mjs` | Submits withdrawals and pays the gas. The pool pays it the fee bound into the proof. |
+| `keeper/keeper.mjs` | Applies the token's policy to the clean set as the registry changes: anyone can run it. |
+| `script/check-deployed.mjs` | Checks that Moderato runs exactly this build. CI runs it daily. |
 | `test/fixtures/proofs.json` | The circuit's proofs in Solidity calldata layout, from `circuits/scripts/solidity-fixtures.mjs`. |
 
 ## Measured
@@ -63,7 +65,7 @@ Deployed on Tempo's public testnet, chain 42431, on 2026-10-10.
 | withdrawal of alice's note to a fresh address, via the relayer | [0xfd2355fb…](https://explore.testnet.tempo.xyz/tx/0xfd2355fb92eebd100aa3a1a34ff9aa4c67fd149de3b682322e18cb9d3ee2509e) | 1,064,745 |
 | withdrawal of carol's note to a fresh address, via the relayer | [0xd60c4be5…](https://explore.testnet.tempo.xyz/tx/0xd60c4be5003273ae16c20294a3dab0e13e3316d8f1cee53efacda062719ce0d6) | 812,481 |
 
-Read back from the chain afterwards:
+Read back from the chain right after that run (the demo has changed the pool since):
 
 - **Bob's deposit:** his clean leaf is zero, and the clean epoch is 1.
 - **The pool:** it holds Bob's 100 dUSD, retained under the issuer's policy.

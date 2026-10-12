@@ -41,4 +41,6 @@ Status: **draft**, Phase 1. Finalized once the build is done.
 4. **Small anonymity sets.** A fixed denomination and a young pool give a small set. Timing and amount correlation shrink it further.
 5. **Curator trust on Solana.** The curator decides what clean means. The policy document is published and hashed on-chain, but applying it is the curator's job.
 6. **Note reuse.** The nullifier is not separated by pool or chain. A client that reuses `k` links its notes.
-7. **Upgradeability and audits.** The Solana programs are deployed upgradeable on devnet. The Tempo pool has no owner and cannot be upgraded. Nothing is audited.
+7. **Timing exclusions.** Every exclusion starts a new epoch, so whoever decides when exclusions land, the issuer, the curator, or anyone able to call `exclude` on a deposit the policy already blocks, can make the proofs in flight stale. Clients prove again; nothing is lost but time.
+8. **Settlement after a block, on Solana.** A spend is checked when it is recorded and paid later in a batch, so a revoke between the two does not stop its payout.
+9. **Upgradeability and audits.** The Solana programs are deployed upgradeable on devnet. The Tempo pool has no owner and cannot be upgraded. Nothing is audited.

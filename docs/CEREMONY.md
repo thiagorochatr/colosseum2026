@@ -30,7 +30,7 @@ The last step is a public random beacon, so the final key cannot be chosen by wh
 
 > **The blockhash of the first finalized Solana mainnet block at or after slot `455,095,000`**, as 32 bytes in hex, applied with `snarkjs zkey beacon` and `numIterationsExp = 10`.
 
-When this was written, mainnet was near slot 455,087,000. The slot was expected around 2026-10-10 03:12 UTC. `circuits/ceremony/solana-beacon.mjs` reads the blockhash, and anyone can check it on any Solana explorer.
+When this was written, mainnet was near slot 455,087,000. The slot was expected around 2026-10-10 03:12 UTC and came at 02:45:32 UTC, since slots ran faster than the estimate. `circuits/ceremony/solana-beacon.mjs` reads the blockhash, and anyone can check it on any Solana explorer.
 
 ### Contributions
 
@@ -68,6 +68,12 @@ Both were the script's fault, not the contributor's, and both printed the entrop
 snarkjs mixes 64 bytes of its own OS randomness into every contribution, and those were never shown, so the printed text alone does not reveal either discarded secret. Both were discarded anyway, because the script promises the entropy is never printed. Neither key is part of the chain.
 
 The script now calls snarkjs's `zKey.contribute` API from `contribute.mjs`, with the entropy read from stdin into memory. It never passes through a command line, an environment variable or a prompt, and any log line containing it is refused. It was tested inside a pseudo-terminal, where the same test does catch the old prompt's echo. The real contribution was made after this fix and before the beacon slot.
+
+### What the public record shows, and what it does not
+
+- **Public:** the beacon's slot was announced in commit `4791162`, pushed at 02:16 UTC, before its block existed at 02:45:32 UTC.
+- **Not public:** the contribution itself was fixed before that block. `withdraw_0001.zkey` was written locally at 02:34:14 UTC, eleven minutes before the beacon's block, but the key file is not committed and the contribution hash first appears in commit `c6220f7`, pushed at 02:49 UTC, four minutes after it. So the public record does not rule out a contributor who saw the blockhash and then chose a contribution; that the order was contribution first rests on the contributor's word.
+- **For the next round:** publish each contribution's hash, in a commit or a post, before the beacon's slot, so the order is on record.
 
 ### Trust model, stated plainly
 
