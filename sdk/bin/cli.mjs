@@ -61,6 +61,9 @@ async function tempoWallet(chain, key) {
 }
 
 async function tempoFind(ctx, note) {
+  // The pool and its denomination come from this network's deployment, never from the note alone.
+  if (note.pool.toLowerCase() !== ctx.dep.pool.toLowerCase()) throw new Error("this note is for another pool than the network's");
+  if (BigInt(note.denomination) !== BigInt(ctx.dep.denomination)) throw new Error("this note's denomination is not the pool's");
   const synced = await T.syncPool(ctx.publicClient, { pool: ctx.dep.pool, fromBlock: ctx.dep.deployBlock });
   const c = await commitmentOf(note);
   return { synced, index: synced.leaves.findIndex((l) => l === c) };
@@ -69,12 +72,11 @@ async function tempoFind(ctx, note) {
 const tempo = {
   async deposit(note, opts) {
     const ctx = await tempoCtx(note.network);
-    if (note.pool.toLowerCase() !== ctx.dep.pool.toLowerCase()) throw new Error("this note is for another pool than the network's");
     // A second deposit of one note shares its nullifier, so it could never be withdrawn.
     if ((await tempoFind(ctx, note)).index >= 0) throw new Error("this note is already deposited; create a new one");
     const token = await ctx.read("token");
     const wallet = await tempoWallet(ctx.chain, opts.key ?? process.env.TEMPO_PRIVATE_KEY);
-    const calls = T.depositCalls({ pool: ctx.dep.pool, token, denomination: note.denomination, commitment: await commitmentOf(note) });
+    const calls = T.depositCalls({ pool: ctx.dep.pool, token, denomination: BigInt(ctx.dep.denomination), commitment: await commitmentOf(note) });
     const receipt = await wallet.sendTransactionSync({ calls });
     if (receipt.status !== "success") throw new Error(`deposit reverted: ${receipt.transactionHash}`);
     return { tx: link(ctx.net, receipt.transactionHash), note: "approve and deposit in one Tempo batch transaction" };
@@ -131,6 +133,7 @@ async function solanaFind(ctx, note) {
   const pool = new ctx.web3.PublicKey(note.pool);
   // The clean set in ctx is the network pool's: a note from another pool cannot use it.
   if (!pool.equals(S.poolAddress(ctx.program, BigInt(ctx.dep.denomination)))) throw new Error("this note is for another pool than the network's");
+  if (BigInt(note.denomination) !== BigInt(ctx.dep.denomination)) throw new Error("this note's denomination is not the pool's");
   const synced = await S.syncPool(ctx.connection, ctx.program, pool);
   const c = await commitmentOf(note);
   return { pool, synced, index: synced.leaves.findIndex((l) => l === c) };
@@ -169,6 +172,7 @@ const solana = {
     // deposited would sign both ends with one key and undo the privacy.
     if (!opts["relay-keypair"]) throw new Error("pass --relay-keypair: a key that never touched this deposit");
     const relay = keypairFile(ctx.web3, opts["relay-keypair"]);
+    if (opts.keypair && relay.publicKey.equals(keypairFile(ctx.web3, opts.keypair).publicKey)) throw new Error("the relay key is the --keypair wallet; use a separate one");
     let wallet = null;
     try {
       wallet = keypairFile(ctx.web3, undefined).publicKey;
@@ -177,6 +181,8 @@ const solana = {
     }
     if (wallet && relay.publicKey.equals(wallet)) throw new Error("the relay key is your default wallet; use a separate one");
     const fee = BigInt(opts.fee ?? 1_000_000);
+    const maxFee = opts["max-fee"] !== undefined ? BigInt(opts["max-fee"]) : BigInt(note.denomination) / 20n;
+    if (fee > maxFee) throw new Error(`a fee of ${fee} is above the ${maxFee} --max-fee allows`);
     const { pool, synced, index } = await solanaFind(ctx, note);
     if (index < 0) throw new Error("this note was never deposited");
     if (index >= ctx.set.depositCount) throw new Error("the curator has not published a clean root covering this deposit yet");

@@ -265,7 +265,9 @@ contract CompliantPoolTest is Test {
         address blocked = makeAddr("blocked");
         REGISTRY.modifyPolicyBlacklist(policy, blocked, true);
         Proof memory p = prove(0, 0, blocked, 0);
-        vm.expectRevert();
+        assertTrue(p.ok);
+        // The proof is valid: the token's policy is what refuses the payment.
+        vm.expectRevert(ITIP20.PolicyForbids.selector);
         withdraw(p, blocked, 0);
         assertFalse(pool.spent(p.nullifierHash), "the failed payment reverted the spend");
     }

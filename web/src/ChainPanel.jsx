@@ -235,7 +235,8 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
                       {st && <Chip tone={st.tone}>{st.label}</Chip>}
                       <button className={note.saved ? "link" : ""} onClick={() => save(note)}>Download key</button>
                     </div>
-                    {!note.saved && !["Withdrawn", "Not deposited"].includes(st?.label) && (
+                    {/* Kept for "Not deposited" too: a deposit whose confirmation was lost can still land. */}
+                    {!note.saved && st?.label !== "Withdrawn" && (
                       offered.has(String(note.k)) ? (
                         <div className="row">
                           <p className="hint">Did the file save? Check your downloads before you confirm.</p>

@@ -110,7 +110,7 @@ export function solanaChain(cfg) {
       p = await this.pool();
       const status = await this.noteStatus(note, p);
       const { index } = status;
-      if (!status.canWithdraw) throw new Error(`Deposit #${index} cannot be withdrawn now: ${status.label.toLowerCase()}.`);
+      if (!status.canWithdraw) throw new Error(`${index >= 0 ? `Deposit #${index}` : "This withdrawal key's deposit"} cannot be withdrawn now: ${status.label.toLowerCase()}.`);
       const set = p.cleanSet;
       step("Rebuilt the pool from devnet history and checked the curator's memo", {
         detail: [
@@ -156,7 +156,7 @@ export function solanaChain(cfg) {
       step("The compliance program verified the proof and wrote a public clearance. The pool accepted the spend", {
         tx: out.tx,
         accounts: [["clearance", S.clearanceAddress(compliance, pool, curator, S.fieldBytes(input.nullifierHash)).toBase58()]],
-        detail: "The clearance and the spend share one slot, so a clearance can never outlive a curator's revocation.",
+        detail: "The clearance and the spend share one slot, so a clearance cannot be kept and used after a curator's revocation.",
         done: true,
       });
       if (out.settleError) {
@@ -167,8 +167,10 @@ export function solanaChain(cfg) {
           accounts: [["beneficiary", recipient]],
           done: true,
         });
+      } else if (out.settled) {
+        step(`A batch of ${out.settled.settled} settled without this spend, which waits for the next one`, { tx: out.settled.tx, done: true });
       } else {
-        step(`Waiting for the batch: ${out.pending} spend pending. The pool pays crowds of at least two, all at one timestamp`, { done: true });
+        step(`Waiting for the batch: ${out.pending} ${out.pending === 1 ? "spend" : "spends"} pending. The pool pays crowds of at least two, all at one timestamp`, { done: true });
       }
       return { tx: out.tx, settled: out.settled, pending: out.pending, received };
     },

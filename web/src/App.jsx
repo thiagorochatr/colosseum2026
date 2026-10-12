@@ -48,7 +48,10 @@ export default function App() {
   const updateLog = useCallback((_id, fn) => setLog(fn), []);
 
   useEffect(() => {
-    getConfig().then(setConfig, (e) => setError(e.message));
+    getConfig().then(
+      (c) => (c[CHAIN]?.error ? setError(`the ${COPY[CHAIN].tab} demo is not configured (${c[CHAIN].error})`) : setConfig(c)),
+      (e) => setError(e.message),
+    );
     if (fromPath() !== CHAIN) window.history.replaceState(null, "", `/${CHAIN}`);
     document.title = `${COPY[CHAIN].tab} · Private payments that keep the issuer's rules`;
     try {
@@ -76,7 +79,7 @@ export default function App() {
         <span className="tab-sub">{copy.sub}</span>
       </div>
 
-      {error && <div className="card error">The demo service is not reachable: {error}</div>}
+      {error && <div className="card error">The demo cannot start: {error}</div>}
       {!config && !error && <div className="card muted">Loading…</div>}
       {chain && <ChainPanel chain={chain} copy={copy} log={log} updateLog={updateLog} />}
 

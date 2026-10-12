@@ -2,7 +2,7 @@
 // reaches the pool's floor), and the curator publishing, blocking or
 // unblocking. The curator's clean set travels in a memo with each root.
 
-import { Connection, Keypair, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, SystemProgram, Transaction, TransactionInstruction, sendAndConfirmTransaction } from "@solana/web3.js";
 import * as S from "compliance-sdk/solana";
 import { cleanTree } from "compliance-sdk/tree";
 import { SOLANA, secret } from "./common.mjs";
@@ -23,24 +23,44 @@ const isPending = (data) => data.length >= 160 && data[0] === 1 && data[1] === 1
 // Three accounts per spend: past this the settle transaction outgrows a packet.
 const MAX_BATCH = 10;
 
-// Names for the custom errors of the two instructions a relay sends.
+// Names for the custom errors of the programs a relay's transaction runs.
 const COMPLIANCE_ERRORS = ["UnknownInstruction", "MalformedInstruction", "NonCanonicalInput", "ProofVerificationFailed", "MissingSignature", "InvalidAccount", "CuratorExists", "WrongAuthority", "UnknownPoolRoot", "StaleCleanRoot", "ClearanceExists", "ArithmeticOverflow"];
-const POOL_ERRORS = { 100: "ClearanceRequired", 101: "InvalidClearance", 102: "ClearanceForAnotherPool", 103: "ClearanceForAnotherNullifier", 104: "WrongCurator", 105: "StaleClearance", 106: "BindingMismatch" };
+const POOL_ERRORS = { 100: "ClearanceRequired", 101: "InvalidClearance", 102: "ClearanceForAnotherPool", 103: "ClearanceForAnotherNullifier", 104: "WrongCurator", 105: "StaleClearance", 106: "BindingMismatch", 107: "PoolNotServed" };
+// mirror-pool's own codes, which the compliant pool returns unchanged.
+const MIRROR_ERRORS = { 1: "MalformedInstruction", 2: "InvalidPda", 3: "MissingSignature", 4: "InvalidOwner", 5: "InvalidPoolAccount", 6: "AlreadyInitialised", 7: "InvalidParameter", 8: "NonCanonicalField", 9: "PoseidonFailed", 10: "TreeFull", 12: "ArithmeticOverflow", 13: "InsolventVault", 14: "InvalidSpendAccount", 15: "NullifierAlreadySpent", 16: "AlreadySettled", 17: "UnknownRoot", 18: "ProofVerificationFailed", 19: "BelowAnonymityFloor", 20: "RelayFeeTooLarge", 21: "CrowdTooSmall", 22: "UnknownSelector", 23: "SelfInvocationRefused", 24: "PayloadTooLarge", 25: "FeeNotUniform" };
 
 /**
- * The program error behind a failed relay, by name, so the client can act on
- * it. A refusal in preflight reads "Instruction 0: custom program error: 0x9";
- * one at execution, after preflight passed, reads {"InstructionError":[0,{"Custom":9}]}.
+ * The program error behind a failed transaction, by name, so the client can
+ * act on it. The logs name the program that failed first, the innermost one:
+ * a system-program failure inside the compliance program's account creation
+ * is the system program's, not the compliance program's. Without logs, the
+ * instruction index decides: 0 is VerifyClearance, 1 is the spend.
  */
+function programError(e) {
+  const logs = (e.logs ?? e.transactionLogs ?? []).join("\n");
+  const failed = logs.match(/Program (\w+) failed: custom program error: 0x([0-9a-f]+)/i);
+  let who;
+  let code;
+  if (failed) {
+    who = failed[1];
+    code = parseInt(failed[2], 16);
+  } else {
+    const text = String(e.message);
+    const pre = text.match(/Instruction (\d+): custom program error: 0x([0-9a-f]+)/i);
+    const exec = text.match(/"InstructionError":\[(\d+),\{"Custom":(\d+)\}/);
+    if (!pre && !exec) return null;
+    who = (pre ? pre[1] : exec[1]) === "0" ? compliance.toBase58() : program.toBase58();
+    code = pre ? parseInt(pre[2], 16) : Number(exec[2]);
+  }
+  if (who === compliance.toBase58()) return { by: "the compliance program", name: COMPLIANCE_ERRORS[code] ?? `error ${code}`, code };
+  if (who === program.toBase58()) return { by: "the pool", name: (code >= 100 ? POOL_ERRORS : MIRROR_ERRORS)[code] ?? `error ${code}`, code };
+  if (who === SystemProgram.programId.toBase58()) return { by: "the system program", name: `error ${code}, likely too few lamports`, code };
+  return { by: `program ${who}`, name: `error ${code}`, code };
+}
+
 function relayError(e) {
-  const text = `${e.message} ${(e.logs ?? e.transactionLogs ?? []).join(" ")}`;
-  const pre = text.match(/Instruction (\d+): custom program error: 0x([0-9a-f]+)/i);
-  const exec = text.match(/"InstructionError":\[(\d+),\{"Custom":(\d+)\}/);
-  if (!pre && !exec) return e;
-  const m = pre ? [null, pre[1], pre[2]] : [null, exec[1], Number(exec[2]).toString(16)];
-  const code = parseInt(m[2], 16);
-  const name = m[1] === "0" ? COMPLIANCE_ERRORS[code] : POOL_ERRORS[code];
-  return new Error(`the ${m[1] === "0" ? "compliance program" : "pool"} refused the withdrawal: ${name ?? `error ${code}`}`, { cause: e });
+  const p = programError(e);
+  return p ? new Error(`${p.by} refused the withdrawal: ${p.name}`, { cause: e }) : e;
 }
 
 /**
@@ -93,23 +113,51 @@ async function settleable(known = []) {
   return ok.slice(0, MAX_BATCH);
 }
 
-async function settle(allowBelowFloor = false, known = []) {
-  const pending = await settleable(known);
-  if (!pending.length) return null;
-  const { TransactionInstruction } = await import("@solana/web3.js");
+function settleInstruction(spends, allowBelowFloor) {
   const r = relay();
   const keys = [
     { pubkey: r.publicKey, isSigner: true, isWritable: true },
     { pubkey: pool, isSigner: false, isWritable: true },
     { pubkey: S.vaultAddress(program, pool), isSigner: false, isWritable: true },
-    ...pending.flatMap((a) => [
+    ...spends.flatMap((a) => [
       { pubkey: a.pubkey, isSigner: false, isWritable: true },
       { pubkey: new PublicKey(a.account.data.subarray(32, 64)), isSigner: false, isWritable: true },
       { pubkey: new PublicKey(a.account.data.subarray(64, 96)), isSigner: false, isWritable: true },
     ]),
   ];
-  const ix = new TransactionInstruction({ programId: program, keys, data: Buffer.from([3, pending.length, allowBelowFloor ? 1 : 0]) });
-  return { tx: await send([ix], [r]), settled: pending.length, included: pending.map((a) => a.pubkey.toBase58()) };
+  return new TransactionInstruction({ programId: program, keys, data: Buffer.from([3, spends.length, allowBelowFloor ? 1 : 0]) });
+}
+
+async function simulates(spends, allowBelowFloor) {
+  const r = relay();
+  const tx = new Transaction({ feePayer: r.publicKey, recentBlockhash: (await connection.getLatestBlockhash()).blockhash }).add(settleInstruction(spends, allowBelowFloor));
+  const out = await connection.simulateTransaction(tx, [r]);
+  return out.value.err ? { err: out.value.err, logs: out.value.logs ?? [] } : null;
+}
+
+/**
+ * Settles the settleable spends. A beneficiary that became unpayable after its
+ * spend was recorded, such as an address a program was later deployed to,
+ * would fail the whole batch, so the batch is simulated first and, if it
+ * fails, one spend at a time is left out until it passes.
+ */
+async function settle(allowBelowFloor = false, known = []) {
+  let pending = await settleable(known);
+  if (!pending.length) return null;
+  const failure = await simulates(pending, allowBelowFloor);
+  if (failure) {
+    const p = programError({ logs: failure.logs, message: JSON.stringify(failure.err) });
+    // Too few spends before the pool's timeout: nothing to drop, just wait.
+    if (p?.code === 21 && p.by === "the pool") throw new Error("CrowdTooSmall");
+    let found = null;
+    for (let i = 0; i < pending.length && !found; i++) {
+      const without = pending.filter((_, j) => j !== i);
+      if (without.length && !(await simulates(without, allowBelowFloor))) found = without;
+    }
+    if (!found) throw new Error(`the batch does not settle: ${p ? `${p.by}: ${p.name}` : JSON.stringify(failure.err)}`);
+    pending = found;
+  }
+  return { tx: await send([settleInstruction(pending, allowBelowFloor)], [relay()]), settled: pending.length, included: pending.map((a) => a.pubkey.toBase58()) };
 }
 
 /**
@@ -192,6 +240,12 @@ export const solanaActions = {
     const fee = BigInt(SOLANA.fee);
     if (!isPubkey(req.beneficiary)) throw new Error("beneficiary is not a public key");
     if (protectedKeys().includes(req.beneficiary)) throw new Error("the beneficiary cannot be one of the demo's own accounts");
+    // A wallet address is a point on the curve. Program-derived addresses,
+    // sysvars and reserved accounts are not wallets, and the pool may not be able to pay them.
+    // Sysvars and builtin programs have reserved, padded addresses, which the runtime keeps read-only.
+    if (!PublicKey.isOnCurve(new PublicKey(req.beneficiary).toBytes()) || /1{16}$/.test(req.beneficiary)) {
+      throw new Error("the beneficiary must be an ordinary wallet address");
+    }
     const target = await connection.getAccountInfo(new PublicKey(req.beneficiary));
     if (target && (target.executable || !target.owner.equals(SystemProgram.programId))) {
       throw new Error("the beneficiary must be an ordinary wallet address: the pool cannot pay a program or a program's account");
@@ -237,7 +291,7 @@ export const solanaActions = {
       return (await settle(below)) ?? { settled: 0, pending, floor: K_FLOOR };
     } catch (e) {
       // Below the floor, mirror-pool pays only once the oldest spend has waited out the pool's timeout.
-      if (pending < K_FLOOR) return { settled: 0, pending, floor: K_FLOOR, waiting: true };
+      if (e.message === "CrowdTooSmall") return { settled: 0, pending, floor: K_FLOOR, waiting: true };
       throw e;
     }
   },

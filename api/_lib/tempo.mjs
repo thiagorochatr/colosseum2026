@@ -63,8 +63,6 @@ const isProtected = (a) => [TEMPO.pool, TEMPO.issuer, relayerAddress()].some((p)
 
 const isUint = (x) => /^[0-9]{1,78}$/.test(String(x));
 
-const chunks = (list, size) => Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, (i + 1) * size));
-
 export const tempoActions = {
   /** Gas stablecoins from Moderato's faucet, and Demo USD from the issuer. */
   async faucet({ address }) {
@@ -154,7 +152,7 @@ export const tempoActions = {
     const rest = indices.slice(3);
     if (rest.length) {
       // The address is blocked now, so the keeper's sweep finishes the job and re-plans if raced.
-      const swept = await sweep();
+      const swept = await sweepBeforeRelay();
       tx = swept.tx ?? tx;
     }
     return { tx, excluded: indices };
@@ -170,9 +168,16 @@ export const tempoActions = {
       .filter((i) => i >= 0);
     const { encodeFunctionData } = await import("viem");
     const unblock = { to: T.REGISTRY, data: encodeFunctionData({ abi: T.REGISTRY_ABI, functionName: "modifyPolicyBlacklist", args: [await policyId(), address, false] }) };
-    const [first, ...rest] = [indices.slice(0, 3), ...chunks(indices.slice(3), 4)];
-    let tx = await sendCalls(issuer(), [unblock, ...T.sweepCalls({ pool: TEMPO.pool, exclude: [], reinclude: first })]);
-    for (const part of rest) tx = await sendCalls(issuer(), T.sweepCalls({ pool: TEMPO.pool, exclude: [], reinclude: part }));
-    return { tx, reincluded: indices };
+    // The unblock and the first three reincludes in one batch. If a keeper
+    // reincluded one first, the batch reverts with NotExcluded: then unblock
+    // alone. Either way the keeper's sweep reincludes whatever is left.
+    let tx;
+    try {
+      tx = await sendCalls(issuer(), [unblock, ...T.sweepCalls({ pool: TEMPO.pool, exclude: [], reinclude: indices.slice(0, 3) })]);
+    } catch {
+      tx = await sendCalls(issuer(), [unblock]);
+    }
+    const swept = await sweepBeforeRelay();
+    return { tx: swept.tx ?? tx, reincluded: indices };
   },
 };

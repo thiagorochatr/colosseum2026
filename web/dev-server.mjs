@@ -44,4 +44,5 @@ createServer(async (req, res) => {
     }
   }
   app.middlewares(req, res);
-}).listen(port, () => console.log(`http://localhost:${port}`));
+  // Local only: this server holds the test networks' keys.
+}).listen(port, "127.0.0.1", () => console.log(`http://localhost:${port}`));

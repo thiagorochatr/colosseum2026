@@ -9,7 +9,7 @@ export async function post(path, body) {
 
 export async function getConfig() {
   const res = await fetch("/api/config");
-  if (!res.ok) throw new Error("the demo service is not reachable");
+  if (!res.ok) throw new Error(`the demo service answered HTTP ${res.status}`);
   return res.json();
 }
 
