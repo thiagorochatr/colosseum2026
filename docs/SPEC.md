@@ -79,7 +79,7 @@ Size estimate: 42 Poseidon permutations, which is 40 `H2`, one `H3` and one `H1`
 
 **Setup:**
 - **Phase 1:** a published perpetual powers-of-tau file.
-- **Phase 2:** a multi-party snarkjs ceremony, closed with a public beacon (see `CEREMONY.md`).
+- **Phase 2:** a snarkjs ceremony open to contributions, with one contributor so far, closed with a public beacon announced in advance (see `CEREMONY.md`).
 - **Development:** a single-contribution development key is used only until the ceremony closes, and is never deployed as final.
 
 ## 6. Action binding
@@ -144,7 +144,7 @@ The roots and the domain strings differ between chains, so a proof made for one 
 - **Supported policy types:** `WHITELIST`, `BLACKLIST` and `COMPOUND`. A deposit is clean while its depositor is an authorized **sender** under the token's **current** policy. For a compound policy that is its sender part, which `isAuthorizedSender` answers.
 - **Whitelist tokens:** the issuer must authorize the pool's own address, or the pool can neither receive nor pay.
 
-**Closing the race:** the issuer blocks an address and calls `exclude` for each of its deposits in **one Tempo batch transaction**, so no withdrawal fits in between. For issuers that do not batch, a keeper applies the policy: it watches the registry's `BlacklistUpdated` and `WhitelistUpdated` events and sends the `exclude` and `reinclude` calls they require, in one batch (`tempo/keeper/keeper.mjs`, built on the SDK's `readSweep`). The demo service's relayer runs the same sweep before every withdrawal it submits. A blocked depositor who sees the block coming can still withdraw before the keeper's transaction lands, as a TIP-20 holder can move funds before a freeze.
+**Closing the race:** the issuer blocks an address and calls `exclude` for its deposits in **one Tempo batch transaction**, so no withdrawal fits in between. Each `exclude` costs about 1.5M gas, so the demo service puts the block and the first three in one batch and sends any further ones in batches of four. For issuers that do not batch, a keeper applies the policy: it watches the registry's `BlacklistUpdated` and `WhitelistUpdated` events and sends the `exclude` and `reinclude` calls they require, in batches of four (`tempo/keeper/keeper.mjs`, built on the SDK's `readSweep`). The demo service's relayer runs the same sweep before every withdrawal it submits. A blocked depositor who sees the block coming can still withdraw before the keeper's transaction lands, as a TIP-20 holder can move funds before a freeze.
 
 ## 8. Solana
 
@@ -155,7 +155,7 @@ A native program, in the same style as `mirror-pool`.
 **Accounts:**
 - **Curator**, at PDA `["curator", authority]`. It holds the `authority`, a `policy_hash`, an `epoch` and a ring of the last 32 clean roots, each tagged with its epoch.
   - `policy_hash` is the sha256 of the published policy document.
-- **Clearance**, at PDA `["clearance", pool, nullifierHash]`. It holds a version, `pool`, `curator`, `nullifierHash`, `binding`, `cleanRoot` and the slot it was written in.
+- **Clearance**, at PDA `["clearance", pool, curatorAuthority, nullifierHash]`. It holds a version, `pool`, the curator's authority key, `nullifierHash`, `binding`, `cleanRoot`, the curator's epoch and the slot it was written in. With the curator in the address, no other curator can write over a clearance that names this one.
 
 **Instructions:**
 - **`InitCurator { policy_hash }`**, signed by the authority.
@@ -170,9 +170,9 @@ A native program, in the same style as `mirror-pool`.
      It does not check the account's owner. Section 8.2 explains why a fake pool account gains nothing.
   2. Checks that `cleanRoot` is in the curator's ring, tagged with the current epoch.
   3. Verifies the Groth16 proof with `groth16-solana` over the four public inputs.
-  4. Writes the clearance account, keyed by pool and nullifier. A clearance written in an earlier slot is overwritten: a spend must consume its clearance in the slot it was written, so one left over, by a spend that never followed or by someone who sent `VerifyClearance` alone with a proof they saw, would otherwise freeze the note. A second clearance in the same slot is refused. A spent note gains nothing from an overwrite, since its spend record already exists.
+  4. Writes the clearance account, keyed by pool, curator and nullifier. An existing clearance is always rewritten, never refused: a spend must consume its clearance in the slot it was written, so refusing one would let anyone who saw the proof freeze the note by writing it first, in an earlier slot or just ahead in the same one. A spent note gains nothing from a rewrite, since its spend record already exists. So a clearance records the latest verification; whether the note was spent is the spend record's to say.
 
-A clearance is public evidence. Anyone, such as an offramp, a DEX or a transfer hook, can check that pool `P` spent nullifier `N`, bound to `binding`, under curator `C`'s clean root `R`.
+A clearance is public evidence. Anyone, such as an offramp, a DEX or a transfer hook, can check that a proof for nullifier `N` in pool `P`, bound to `binding`, verified under curator `C`'s clean root `R`. Together with the pool's spend record for `N`, it shows that the spend was cleared.
 
 ### 8.2 The compliant pool
 
@@ -215,7 +215,7 @@ A clearance is public evidence. Anyone, such as an offramp, a DEX or a transfer 
 - **Tempo:** the client rebuilds both trees from `Deposit`, `Excluded` and `Reincluded` events.
 - **Solana:** the client rebuilds the pool tree from history and the clean tree from the curator's latest accepted memo.
 - **Proving:** snarkjs with the circuit's `wasm` and the final `zkey`, in the browser or in Node.
-- **Verifying key:** both verifiers are generated from one `vk.json`, and its sha256 is printed by both deploy scripts. Matching digests are the check that the two chains verify the same statement.
+- **Verifying key:** both verifiers are generated from one `vk.json` by `circuits/scripts/regenerate-verifiers.sh`, which prints its sha256. CI regenerates both on every push and fails if either differs from the committed file, which is the check that the two chains verify the same statement.
 
 ## 10. Confirmed in Phase 3
 
@@ -225,4 +225,4 @@ A clearance is public evidence. Anyone, such as an offramp, a DEX or a transfer 
 4. **Groth16 on Tempo.**
    - The snarkjs verifier costs about 216k gas to verify with four public inputs, and about 280k gas as a whole transaction on a local Tempo node.
    - Deploying it costs about 2.43M gas on a local Tempo node, and an estimated 2.45M on Moderato. The difference from Ethereum comes from Tempo's 1,000 gas per deployed byte.
-5. **Groth16 on Solana.** `VerifyProof` with four public inputs costs 96,940 compute units in the worst case, matching mirror-pool's model.
+5. **Groth16 on Solana.** `VerifyProof` with four public inputs costs 96,954 compute units in the worst case, matching mirror-pool's model.

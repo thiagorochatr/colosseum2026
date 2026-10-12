@@ -56,7 +56,7 @@ When this was written, mainnet was near slot 455,087,000. The slot was expected 
 | `circuits/ceremony/vk.json`, the verifying key | `e5d67dab6cb8819d8b6e11f1f36d460d68f542392049f86fc5c0b0b5bec07cf0` |
 | The verifying key in Solana's on-chain layout | `e453d98a0fea776c6cbc7a307532e44947a0f13aafeae3bebf8793897b455c4a` |
 
-The proving key, the witness generator and the verifying key are published in the [ceremony-v1 release](https://github.com/thiagorochatr/colosseum2026/releases/tag/ceremony-v1), with a `SHA256SUMS` file. The Solana module and the Solidity verifier are both generated from this key by `circuits/scripts/regenerate-verifiers.sh`. A check confirms that every constant of `vk.json` appears in the Solidity verifier. The circuit, Solana and Tempo test suites all pass under it.
+The proving key, the witness generator and the verifying key are published in the [ceremony-v1 release](https://github.com/thiagorochatr/colosseum2026/releases/tag/ceremony-v1), with a `SHA256SUMS` file. The Solana module and the Solidity verifier are both generated from this key by `circuits/scripts/regenerate-verifiers.sh`. CI regenerates both from the final key on every push and fails if either differs from the committed file. The circuit, Solana and Tempo test suites all pass under it.
 
 ### Two discarded attempts
 
