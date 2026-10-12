@@ -176,7 +176,7 @@ const solana = {
     const nullifier = S.fieldBytes(await nullifierOf(note));
     const sig = await solanaSend(ctx, [
       S.instructions.verifyClearance(ctx.compliance, relay.publicKey, ctx.curatorAuthority, pool, S.toSolana(proof), inputs),
-      S.instructions.submitClearedSpend(ctx.program, ctx.compliance, relay.publicKey, pool, nullifier, beneficiary, fee),
+      S.instructions.submitClearedSpend(ctx.program, ctx.compliance, ctx.curatorAuthority, relay.publicKey, pool, nullifier, beneficiary, fee),
     ], [relay]);
     return { tx: link(ctx.net, sig), beneficiary: opts.to, pending: "settles with the next batch: compliance settle" };
   },
@@ -185,8 +185,13 @@ const solana = {
     const ctx = await solanaCtx(opts.network);
     const pool = S.poolAddress(ctx.program, BigInt(ctx.dep.denomination));
     const accounts = await ctx.connection.getProgramAccounts(ctx.program, { filters: [{ memcmp: { offset: 96, bytes: pool.toBase58() } }] });
-    // Spend records of this pool that are still pending: version 1, status 1, the pool at offset 96.
-    const pending = accounts.filter((a) => a.account.data.length >= 160 && a.account.data[0] === 1 && a.account.data[1] === 1);
+    // Spend records of this pool that are still pending (version 1, status 1, the pool at offset 96)
+    // and settle together: plain transfers (selector 0, at 8) at one relay fee (at 16), ten at most.
+    const fee = BigInt(opts.fee ?? 1_000_000);
+    const pending = accounts
+      .filter((a) => a.account.data.length >= 160 && a.account.data[0] === 1 && a.account.data[1] === 1)
+      .filter((a) => a.account.data.readBigUInt64LE(8) === 0n && a.account.data.readBigUInt64LE(16) === fee)
+      .slice(0, 10);
     if (!pending.length) return { settled: 0 };
     const kp = keypairFile(ctx.web3, opts.keypair);
     const metas = [

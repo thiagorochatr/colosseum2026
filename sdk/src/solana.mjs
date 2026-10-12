@@ -80,8 +80,9 @@ export const poolAddress = (program, denomination) => pda([text("pool"), u64le(d
 export const vaultAddress = (program, pool) => pda([text("vault"), pool.toBytes()], program);
 export const spendAddress = (program, pool, nullifier) => pda([text("spend"), pool.toBytes(), bytes32(nullifier)], program);
 export const curatorAddress = (compliance, authority) => pda([text("curator"), authority.toBytes()], compliance);
-export const clearanceAddress = (compliance, pool, nullifier) =>
-  pda([text("clearance"), pool.toBytes(), bytes32(nullifier)], compliance);
+/** One clearance per pool, curator and nullifier. */
+export const clearanceAddress = (compliance, pool, curatorAuthority, nullifier) =>
+  pda([text("clearance"), pool.toBytes(), curatorAuthority.toBytes(), bytes32(nullifier)], compliance);
 
 // --------------------------------------------------------------- instructions
 
@@ -131,13 +132,13 @@ export const instructions = {
         w(payer, true),
         ro(curatorAddress(compliance, curatorAuthority)),
         ro(pool),
-        w(clearanceAddress(compliance, pool, be32(inputs[2]))),
+        w(clearanceAddress(compliance, pool, curatorAuthority, be32(inputs[2]))),
         ro(SystemProgram.programId),
       ],
       [Uint8Array.of(4), proof.a, proof.b, proof.c, ...inputs.map(be32)],
     ),
   /** A transfer action: selector 0, no target program, no payload. */
-  submitClearedSpend: (program, compliance, relay, pool, nullifier, beneficiary, relayFee) =>
+  submitClearedSpend: (program, compliance, curatorAuthority, relay, pool, nullifier, beneficiary, relayFee) =>
     ix(
       program,
       [
@@ -145,7 +146,7 @@ export const instructions = {
         w(pool),
         w(spendAddress(program, pool, nullifier)),
         ro(SystemProgram.programId),
-        ro(clearanceAddress(compliance, pool, nullifier)),
+        ro(clearanceAddress(compliance, pool, curatorAuthority, nullifier)),
       ],
       [Uint8Array.of(4), bytes32(nullifier), u64le(0), new Uint8Array(32), beneficiary.toBytes(), u64le(relayFee), Uint8Array.of(0), new Uint8Array(2)],
     ),
@@ -192,6 +193,49 @@ export async function poolState(connection, pool) {
   return { depositCount: readU64(d, 24), spendCount: readU64(d, 32), currentRoot: readBe(d.subarray(696 + 32 * rootPos, 728 + 32 * rootPos)) };
 }
 
+const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+/** Base58 to bytes: inner instructions come back from RPC with base58 data. */
+function fromBase58(s) {
+  let n = 0n;
+  for (const ch of s) {
+    const v = BASE58.indexOf(ch);
+    if (v < 0) throw new Error("not base58");
+    n = n * 58n + BigInt(v);
+  }
+  const hex = n === 0n ? "" : n.toString(16);
+  const body = hexToBytes(`0x${hex.length % 2 ? "0" : ""}${hex}`);
+  let zeros = 0;
+  while (s[zeros] === "1") zeros++;
+  return Uint8Array.from([...new Uint8Array(zeros), ...(n === 0n ? [] : body)]);
+}
+
+/**
+ * Every instruction of a confirmed transaction in execution order, each with
+ * its program and account keys resolved: top-level ones and, right after each,
+ * the instructions it invoked. Keys loaded from lookup tables are included, so
+ * a deposit made through another program or a v0 transaction is still seen.
+ */
+export function executedInstructions(tx) {
+  const msg = tx.transaction.message;
+  const loaded = tx.meta?.loadedAddresses;
+  const keys = [...(msg.staticAccountKeys ?? msg.accountKeys), ...(loaded?.writable ?? []), ...(loaded?.readonly ?? [])].map((k) =>
+    typeof k === "string" ? new PublicKey(k) : k,
+  );
+  const resolve = (ci, data) => ({
+    program: keys[ci.programIdIndex],
+    accounts: (ci.accountKeyIndexes ?? ci.accounts).map((i) => keys[i]),
+    data,
+  });
+  const inner = new Map((tx.meta?.innerInstructions ?? []).map((x) => [x.index, x.instructions]));
+  const out = [];
+  (msg.compiledInstructions ?? msg.instructions).forEach((ci, i) => {
+    out.push(resolve(ci, typeof ci.data === "string" ? fromBase58(ci.data) : Uint8Array.from(ci.data)));
+    for (const x of inner.get(i) ?? []) out.push(resolve(x, typeof x.data === "string" ? fromBase58(x.data) : Uint8Array.from(x.data)));
+  });
+  return out;
+}
+
 /**
  * The pool's leaves and depositors in deposit order, rebuilt from its history.
  * The count must match the pool's and the rebuilt root must be its current root.
@@ -210,14 +254,12 @@ export async function syncPool(connection, program, pool) {
   for (const { signature, err } of sigs) {
     if (err) continue;
     const tx = await fetchTx(connection, signature);
-    const msg = tx.transaction.message;
-    const keys = msg.staticAccountKeys ?? msg.accountKeys;
-    for (const ci of msg.compiledInstructions ?? msg.instructions) {
-      if (!keys[ci.programIdIndex].equals(program)) continue;
-      const data = Uint8Array.from(ci.data);
-      const accounts = ci.accountKeyIndexes ?? ci.accounts;
-      if (data[0] === 1 && data.length === 33 && keys[accounts[1]].equals(pool)) {
-        deposits.push({ commitment: readBe(data.subarray(1, 33)), depositor: keys[accounts[0]].toBase58(), signature });
+    if (!tx) throw new Error(`transaction ${signature} is not available from this RPC yet`);
+    for (const ix of executedInstructions(tx)) {
+      if (!ix.program?.equals(program)) continue;
+      const { data, accounts } = ix;
+      if (data[0] === 1 && data.length === 33 && accounts[1]?.equals(pool)) {
+        deposits.push({ commitment: readBe(data.subarray(1, 33)), depositor: accounts[0].toBase58(), signature });
       }
     }
   }
@@ -315,21 +357,23 @@ function signedBy(tx, authority) {
 /**
  * The latest clean set the curator published for `pool` and still stands
  * behind, or null if none is found among the curator account's most recent
- * `maxScan` transactions. Every withdrawal also touches that account, and
- * anyone can reference it, so this pages back through its history and reads
- * only memos in transactions the curator signed. With `leaves`, a memo must
- * also rebuild to its own root.
+ * `maxScan` transactions of the curator's authority. Anyone can reference
+ * that key, so this pages back through its history and reads only memos in
+ * transactions the authority signed. With `leaves`, a memo must also rebuild
+ * to its own root.
  */
 export async function readCleanSet(connection, compliance, authority, pool, { leaves, maxScan = 2000 } = {}) {
   const state = await curatorState(connection, compliance, authority);
   if (!state) return null;
-  const account = curatorAddress(compliance, authority);
+  // The authority's own history: withdrawals touch the curator account, not
+  // the authority, so this is mostly publications. A transaction with no memo
+  // is skipped without fetching it.
   let before;
   for (let scanned = 0; scanned < maxScan; ) {
-    const sigs = await withBackoff(() => connection.getSignaturesForAddress(account, { limit: 100, before }, "confirmed"));
+    const sigs = await withBackoff(() => connection.getSignaturesForAddress(authority, { limit: 100, before }, "confirmed"));
     if (!sigs.length) return null;
-    for (const { signature, err } of sigs) {
-      if (err) continue;
+    for (const { signature, err, memo } of sigs) {
+      if (err || !memo) continue;
       const tx = await fetchTx(connection, signature);
       if (!tx || !signedBy(tx, authority)) continue;
       const msg = tx.transaction.message;

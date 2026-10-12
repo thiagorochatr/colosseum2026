@@ -64,7 +64,9 @@ export function solanaChain(cfg) {
 
     async noteStatus(note, p) {
       const c = await commitmentOf(note);
-      const index = p.synced.leaves.findIndex((l) => l === c);
+      // Prefer a clean index if the same commitment was deposited more than once.
+      const matches = p.synced.leaves.flatMap((l, i) => (l === c ? [i] : []));
+      const index = matches.find((i) => p.deposits[i]?.clean) ?? matches[0] ?? -1;
       if (index < 0) return { index, label: "Not deposited" };
       const record = await connection.getAccountInfo(S.spendAddress(program, pool, S.fieldBytes(await nullifierOf(note))));
       if (record) return record.data[1] === 2 ? { index, label: "Withdrawn", tone: "done" } : { index, label: "Waiting for the batch", tone: "wait" };
@@ -76,6 +78,9 @@ export function solanaChain(cfg) {
 
     /** `keep` stores the key before anything is sent, so a lost confirmation cannot lose it. */
     async deposit(step, keep) {
+      // The deposit plus fees and the spend record's rent.
+      const have = await connection.getBalance(kp.publicKey);
+      if (have < Number(cfg.denomination) + 10_000_000) throw new Error(`This wallet holds ${unit(have)}. Get test funds first.`);
       const note = createNote(scope);
       keep(note);
       step("Created a withdrawal key in this browser", { detail: "Two random field elements, k and r. They stay in this browser unless you download the key.", done: true });
@@ -143,20 +148,20 @@ export function solanaChain(cfg) {
         });
       } catch (e) {
         // The curator revoked this clean root while the proof was being made. Prove again, once.
-        if (retried || !/StaleCleanRoot/.test(e.message)) throw e;
+        if (retried || !/StaleCleanRoot|UnknownPoolRoot/.test(e.message)) throw e;
         step("The curator published a new clean set while proving, so this root is stale. Proving again", { done: true });
         return this.withdraw(note, recipient, p, step, true);
       }
       const received = unit(BigInt(cfg.denomination) - fee);
       step("The compliance program verified the proof and wrote a public clearance. The pool accepted the spend", {
         tx: out.tx,
-        accounts: [["clearance", S.clearanceAddress(compliance, pool, S.fieldBytes(input.nullifierHash)).toBase58()]],
+        accounts: [["clearance", S.clearanceAddress(compliance, pool, curator, S.fieldBytes(input.nullifierHash)).toBase58()]],
         detail: "The clearance and the spend share one slot, so a clearance can never outlive a curator's revocation.",
         done: true,
       });
       if (out.settleError) {
         step(`The spend is recorded, but settling the batch failed: ${out.settleError}. Retry with "Settle the batch"`, { done: true });
-      } else if (out.settled) {
+      } else if (out.settled && out.paid) {
         step(`The batch settled: ${out.settled.settled} withdrawals paid at once, ${received} of them to ${short(recipient)}`, {
           tx: out.settled.tx,
           accounts: [["beneficiary", recipient]],
@@ -170,9 +175,24 @@ export function solanaChain(cfg) {
 
     async settle(step) {
       step("Asking the relay to settle the pending batch");
-      const r = await post("/api/solana/settle", {});
+      // Below the floor, the pool itself decides: it pays a lone spend only once the pool's timeout has passed.
+      const r = await post("/api/solana/settle", { allowBelowFloor: true });
       if (r.settled) step(`The batch settled: ${r.settled} withdrawals paid at once`, { tx: r.tx, done: true });
-      else step(`Not yet: ${r.pending} spend pending, and the pool needs at least ${r.floor} or its timeout`, { done: true });
+      else if (r.waiting) step(`Not yet: ${r.pending} spend pending. The pool pays fewer than ${r.floor} only after its timeout, so try again later or wait for another withdrawal`, { done: true });
+      else step(`Nothing to settle: ${r.pending} spend pending`, { done: true });
+      return r;
+    },
+
+    /** Asks the curator to publish a clean root that covers every deposit so far. */
+    async publish(step) {
+      step("Asking the curator to apply its policy to every deposit so far");
+      const r = await post("/api/solana/publish", {});
+      step(`Curator published the clean root for ${r.depositCount} deposits`, {
+        tx: r.tx,
+        accounts: curatorAccount,
+        detail: [["excluded by the policy", indices(r.excluded)]],
+        done: true,
+      });
       return r;
     },
 

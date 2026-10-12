@@ -20,8 +20,6 @@ const K_FLOOR = 2;
 const send = (ixs, signers) => sendAndConfirmTransaction(connection, new Transaction().add(...ixs), signers, { commitment: "confirmed" });
 
 const isPending = (data) => data.length >= 160 && data[0] === 1 && data[1] === 1;
-// mirror-pool settles a batch only if every spend in it pays the same relay fee.
-const feeOf = (data) => Buffer.from(data).readBigUInt64LE(16);
 // Three accounts per spend: past this the settle transaction outgrows a packet.
 const MAX_BATCH = 10;
 
@@ -29,11 +27,17 @@ const MAX_BATCH = 10;
 const COMPLIANCE_ERRORS = ["UnknownInstruction", "MalformedInstruction", "NonCanonicalInput", "ProofVerificationFailed", "MissingSignature", "InvalidAccount", "CuratorExists", "WrongAuthority", "UnknownPoolRoot", "StaleCleanRoot", "ClearanceExists", "ArithmeticOverflow"];
 const POOL_ERRORS = { 100: "ClearanceRequired", 101: "InvalidClearance", 102: "ClearanceForAnotherPool", 103: "ClearanceForAnotherNullifier", 104: "WrongCurator", 105: "StaleClearance", 106: "BindingMismatch" };
 
-/** The program error behind a failed relay, by name, so the client can act on it. */
+/**
+ * The program error behind a failed relay, by name, so the client can act on
+ * it. A refusal in preflight reads "Instruction 0: custom program error: 0x9";
+ * one at execution, after preflight passed, reads {"InstructionError":[0,{"Custom":9}]}.
+ */
 function relayError(e) {
   const text = `${e.message} ${(e.logs ?? e.transactionLogs ?? []).join(" ")}`;
-  const m = text.match(/Instruction (\d+): custom program error: 0x([0-9a-f]+)/i);
-  if (!m) return e;
+  const pre = text.match(/Instruction (\d+): custom program error: 0x([0-9a-f]+)/i);
+  const exec = text.match(/"InstructionError":\[(\d+),\{"Custom":(\d+)\}/);
+  if (!pre && !exec) return e;
+  const m = pre ? [null, pre[1], pre[2]] : [null, exec[1], Number(exec[2]).toString(16)];
   const code = parseInt(m[2], 16);
   const name = m[1] === "0" ? COMPLIANCE_ERRORS[code] : POOL_ERRORS[code];
   return new Error(`the ${m[1] === "0" ? "compliance program" : "pool"} refused the withdrawal: ${name ?? `error ${code}`}`, { cause: e });
@@ -63,9 +67,26 @@ async function pendingSpends(known = []) {
   return found;
 }
 
-async function settle(allowBelowFloor = false, known = []) {
+/**
+ * The pending spends this relay can settle together: plain transfers at its
+ * fee, to an ordinary beneficiary, its own `known` spends first. A spend paying
+ * another fee, invoking a program, or naming the vault or another account the
+ * pool cannot pay would make the whole batch fail, so it is left out.
+ */
+async function settleable(known = []) {
   const fee = BigInt(SOLANA.fee);
-  const pending = (await pendingSpends(known)).filter((a) => feeOf(a.account.data) === fee).slice(0, MAX_BATCH);
+  const banned = new Set(protectedKeys());
+  const first = new Set(known.map((k) => k.toBase58()));
+  const ok = (await pendingSpends(known)).filter(({ account: { data } }) => {
+    const d = Buffer.from(data);
+    return d.readBigUInt64LE(16) === fee && d.readBigUInt64LE(8) === 0n && !banned.has(new PublicKey(d.subarray(32, 64)).toBase58());
+  });
+  ok.sort((a, b) => Number(first.has(b.pubkey.toBase58())) - Number(first.has(a.pubkey.toBase58())));
+  return ok.slice(0, MAX_BATCH);
+}
+
+async function settle(allowBelowFloor = false, known = []) {
+  const pending = await settleable(known);
   if (!pending.length) return null;
   const { TransactionInstruction } = await import("@solana/web3.js");
   const r = relay();
@@ -80,7 +101,7 @@ async function settle(allowBelowFloor = false, known = []) {
     ]),
   ];
   const ix = new TransactionInstruction({ programId: program, keys, data: Buffer.from([3, pending.length, allowBelowFloor ? 1 : 0]) });
-  return { tx: await send([ix], [r]), settled: pending.length };
+  return { tx: await send([ix], [r]), settled: pending.length, included: pending.map((a) => a.pubkey.toBase58()) };
 }
 
 /**
@@ -98,6 +119,17 @@ async function publish(blocklist, { revoke = false, base } = {}) {
   // Another publication may have landed since `base` was read: publishing over
   // it would silently undo its block or unblock.
   if (base && !sameList(base, await currentBlocklist())) throw new Error("the curator's policy changed meanwhile; try again");
+  // The memo carries the whole policy and clean set, and one transaction holds
+  // at most 1232 bytes. Refuse a change that would make it unpublishable.
+  // serialize() itself throws once a transaction passes the limit.
+  let fits = true;
+  try {
+    new Transaction({ feePayer: c.publicKey, recentBlockhash: PublicKey.default.toBase58() }).add(...ixs).serialize({ requireAllSignatures: false, verifySignatures: false });
+  } catch (e) {
+    if (!/too large/i.test(e.message)) throw e;
+    fits = false;
+  }
+  if (!fits) throw new Error("the curator's policy and clean set would not fit in one transaction's memo: unblock someone first");
   return { tx: await send(ixs, [c]), depositCount: leaves.length, excluded, revoked: revoke };
 }
 
@@ -151,6 +183,11 @@ export const solanaActions = {
     if (String(req.fee) !== SOLANA.fee) throw new Error(`the relay fee is exactly ${SOLANA.fee}`);
     const fee = BigInt(SOLANA.fee);
     if (!isPubkey(req.beneficiary)) throw new Error("beneficiary is not a public key");
+    if (protectedKeys().includes(req.beneficiary)) throw new Error("the beneficiary cannot be one of the demo's own accounts");
+    const target = await connection.getAccountInfo(new PublicKey(req.beneficiary));
+    if (target && (target.executable || !target.owner.equals(SystemProgram.programId))) {
+      throw new Error("the beneficiary must be an ordinary wallet address: the pool cannot pay a program or a program's account");
+    }
     const hex = (h, bytes) => {
       if (typeof h !== "string" || !new RegExp(`^[0-9a-f]{${2 * bytes}}$`).test(h)) throw new Error("malformed proof");
       return Uint8Array.from(Buffer.from(h, "hex"));
@@ -164,7 +201,7 @@ export const solanaActions = {
       tx = await send(
         [
           S.instructions.verifyClearance(compliance, r.publicKey, new PublicKey(SOLANA.curatorAuthority), pool, proof, inputs),
-          S.instructions.submitClearedSpend(program, compliance, r.publicKey, pool, S.fieldBytes(inputs[2]), new PublicKey(req.beneficiary), fee),
+          S.instructions.submitClearedSpend(program, compliance, new PublicKey(SOLANA.curatorAuthority), r.publicKey, pool, S.fieldBytes(inputs[2]), new PublicKey(req.beneficiary), fee),
         ],
         [r],
       );
@@ -175,9 +212,9 @@ export const solanaActions = {
     // own, and anyone can retry it, so a failure here does not fail the relay.
     const spend = S.spendAddress(program, pool, S.fieldBytes(inputs[2]));
     try {
-      const pending = (await pendingSpends([spend])).length;
+      const pending = (await settleable([spend])).length;
       const settled = pending >= K_FLOOR ? await settle(false, [spend]) : null;
-      return { tx, pending: settled ? 0 : pending, settled };
+      return { tx, pending: settled ? 0 : pending, settled, paid: Boolean(settled?.included.includes(spend.toBase58())) };
     } catch (e) {
       return { tx, pending: null, settled: null, settleError: e.message };
     }
@@ -185,9 +222,16 @@ export const solanaActions = {
 
   /** Settles whatever is pending; below the floor only once the pool's timeout has run. */
   async settle({ allowBelowFloor = false }) {
-    const pending = (await pendingSpends()).length;
-    if (!allowBelowFloor && pending < K_FLOOR) return { settled: 0, pending, floor: K_FLOOR };
-    return (await settle(Boolean(allowBelowFloor))) ?? { settled: 0, pending, floor: K_FLOOR };
+    const pending = (await settleable()).length;
+    const below = pending < K_FLOOR;
+    if (below && !allowBelowFloor) return { settled: 0, pending, floor: K_FLOOR };
+    try {
+      return (await settle(below)) ?? { settled: 0, pending, floor: K_FLOOR };
+    } catch (e) {
+      // Below the floor, mirror-pool pays only once the oldest spend has waited out the pool's timeout.
+      if (pending < K_FLOOR) return { settled: 0, pending, floor: K_FLOOR, waiting: true };
+      throw e;
+    }
   },
 
   /** The curator publishes a root covering every deposit so far. */

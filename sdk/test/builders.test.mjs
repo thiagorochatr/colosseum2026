@@ -123,6 +123,33 @@ test("a curator memo is accepted only with a held root and the curator's policy 
   }
 });
 
+test("deposits made through another program or with lookup-table keys are still read", async () => {
+  const { default: bs58 } = await import("bs58");
+  const [payer, router, program, pool, fromTable] = Array.from({ length: 5 }, () => PublicKey.unique());
+  const deposit = Uint8Array.from([1, ...new Uint8Array(31), 9]);
+  const tx = {
+    transaction: {
+      message: {
+        staticAccountKeys: [payer, router, program],
+        header: { numRequiredSignatures: 1 },
+        // A top-level call to some router, which then deposits by CPI.
+        compiledInstructions: [{ programIdIndex: 1, accountKeyIndexes: [0, 3], data: Uint8Array.of(7) }],
+      },
+    },
+    meta: {
+      // The pool and one more key come from a lookup table.
+      loadedAddresses: { writable: [pool], readonly: [fromTable] },
+      innerInstructions: [{ index: 0, instructions: [{ programIdIndex: 2, accounts: [0, 3, 4], data: bs58.encode(deposit) }] }],
+    },
+  };
+  const ixs = solana.executedInstructions(tx);
+  assert.equal(ixs.length, 2, "the router's call, then the deposit it invoked");
+  assert.ok(ixs[1].program.equals(program));
+  assert.ok(ixs[1].accounts[1].equals(pool), "the pool, resolved from the lookup table");
+  assert.ok(ixs[1].accounts[2].equals(fromTable));
+  assert.deepEqual(ixs[1].data, deposit, "inner data decoded from base58");
+});
+
 test("the Solana instruction data have the programs' exact lengths", () => {
   const P = new PublicKey("Fg1FxuHcjj54ERfdQQL9tzZq9wDmNfjGmFSkAXxVYdzB");
   const C = new PublicKey("HHapM3yA1JkhFJ1msTc7n3CEQ7PMZvxHMvQz7G7orQ2j");
@@ -134,5 +161,5 @@ test("the Solana instruction data have the programs' exact lengths", () => {
   // ProofRequest: tag + a, b, c + four inputs; ClearedSpend: tag + compliant-pool's BASE_LEN of 115.
   const proof = { a: new Uint8Array(64), b: new Uint8Array(128), c: new Uint8Array(64) };
   assert.equal(solana.instructions.verifyClearance(C, me, me, pool, proof, [1n, 2n, 3n, 4n]).data.length, 1 + 256 + 128);
-  assert.equal(solana.instructions.submitClearedSpend(P, C, me, pool, new Uint8Array(32), me, 5n).data.length, 1 + 115);
+  assert.equal(solana.instructions.submitClearedSpend(P, C, me, me, pool, new Uint8Array(32), me, 5n).data.length, 1 + 115);
 });

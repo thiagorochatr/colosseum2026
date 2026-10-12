@@ -12,7 +12,7 @@ JavaScript (ES modules) shared by the command line, the end-to-end scripts and t
 
 ## What the tests pin
 
-`npm test` runs 16 tests, most of them against values computed elsewhere:
+`npm test` runs 17 tests, most of them against values computed elsewhere:
 
 - trees, paths and circuit inputs equal mirror-core's vectors;
 - the Solana binding equals mirror-core's `action_binding`;
