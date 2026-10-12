@@ -110,7 +110,7 @@ Next:
 | `tools/curation-cost/` | The measurement behind `docs/ANONYMITY_COST.md`, one offline command. |
 | `solana/` | The compliance program, the compliant pool around mirror-pool, the client and curator CLI. Live on devnet. |
 | `sdk/` | Trees, circuit inputs, proving, and each chain's binding and proof layout. |
-| `web/` | The app, one page per chain: [/tempo](https://alibi.thiagorochatr.com/tempo) and [/solana](https://alibi.thiagorochatr.com/solana). |
+| `web/` | The app: a landing page, and one page per chain: [/tempo](https://alibi.thiagorochatr.com/tempo) and [/solana](https://alibi.thiagorochatr.com/solana). |
 | `api/` | The demo service as Vercel functions: faucet, relayer, issuer and curator, holding the test-network keys. |
 | `tempo/` | The private stablecoin pool, its tests, the relayer and the end-to-end flow. Live on Moderato. |
 | `brand/` | The Alibi mark, and PNGs of it for profiles and link previews. |

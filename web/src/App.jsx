@@ -3,6 +3,7 @@ import { getConfig } from "./lib/api.js";
 import { tempoChain } from "./lib/tempo.js";
 import { solanaChain } from "./lib/solana.js";
 import ChainPanel from "./ChainPanel.jsx";
+import Landing from "./Landing.jsx";
 
 const COPY = {
   tempo: {
@@ -26,21 +27,13 @@ const COPY = {
 };
 
 // Each chain is its own page, /tempo and /solana, with no switch between them.
-// The root opens the last one visited, or Tempo.
+// Any other path is the landing page.
 const CHAINS = Object.keys(COPY);
 const fromPath = () => {
   const id = window.location.pathname.replace(/^\/+|\/+$/g, "");
   return CHAINS.includes(id) ? id : null;
 };
-function lastVisited() {
-  try {
-    const id = localStorage.getItem("tab");
-    return CHAINS.includes(id) ? id : null;
-  } catch {
-    return null;
-  }
-}
-const CHAIN = fromPath() ?? lastVisited() ?? "tempo";
+const CHAIN = fromPath();
 const ADAPTERS = { tempo: (c) => tempoChain(c.tempo), solana: (c) => solanaChain(c.solana) };
 
 /** The bar across the top: what this is, and what the page is doing right now. */
@@ -48,8 +41,10 @@ function TopBar({ copy, status }) {
   return (
     <header className="top">
       <div className="brand">
-        <img className="brand-mark" src="/favicon.svg" alt="" width="24" height="24" />
-        <span className="brand-name">Alibi</span>
+        <a className="brand-home" href="/">
+          <img className="brand-mark" src="/favicon.svg" alt="" width="24" height="24" />
+          <span className="brand-name">Alibi</span>
+        </a>
         <span className="brand-tag">Private payments that keep the issuer's rules</span>
         <span className="brand-chain">{copy.tab}</span>
       </div>
@@ -79,6 +74,10 @@ function TopBar({ copy, status }) {
 }
 
 export default function App() {
+  return CHAIN ? <Demo /> : <Landing />;
+}
+
+function Demo() {
   const [config, setConfig] = useState(null);
   const [error, setError] = useState(null);
   const [log, setLog] = useState([]);
@@ -90,13 +89,7 @@ export default function App() {
       (c) => (c[CHAIN]?.error ? setError(`the ${COPY[CHAIN].tab} demo is not configured (${c[CHAIN].error})`) : setConfig(c)),
       (e) => setError(e.message),
     );
-    if (fromPath() !== CHAIN) window.history.replaceState(null, "", `/${CHAIN}`);
-    document.title = `${COPY[CHAIN].tab} · Private payments that keep the issuer's rules`;
-    try {
-      localStorage.setItem("tab", CHAIN);
-    } catch {
-      // Storage can be blocked; remembering the page is only a convenience.
-    }
+    document.title = `Alibi · ${COPY[CHAIN].tab}`;
   }, []);
 
   const chain = useMemo(() => (config ? ADAPTERS[CHAIN](config) : null), [config]);
