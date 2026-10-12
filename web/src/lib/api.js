@@ -1,7 +1,9 @@
 export async function post(path, body) {
   const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const out = await res.json();
-  if (!res.ok) throw new Error(out.error ?? `HTTP ${res.status}`);
+  // A timeout or a platform error page is not JSON: report the status, not a parse error.
+  const out = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(out?.error ?? `the demo service answered HTTP ${res.status}`);
+  if (!out) throw new Error("the demo service sent an unreadable answer");
   return out;
 }
 

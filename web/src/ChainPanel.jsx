@@ -132,7 +132,11 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
     });
 
   const save = (note) => {
-    downloadNote(note);
+    try {
+      downloadNote(note);
+    } catch (e) {
+      setError(e.message);
+    }
     setNotes(loadNotes(chain.id));
     refresh();
   };
@@ -235,7 +239,7 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
                           Pay to
                           <input className="mono" value={recipient} onChange={(e) => setRecipient(e.target.value)} />
                         </label>
-                        <p className="hint">Prefilled with a brand-new address that has never been on chain. The relayer pays the fee and takes it from the withdrawal.</p>
+                        <p className="hint">Prefilled with a brand-new address that has never been on chain. Its key is not kept anywhere, so on this test network the payment only shows that it arrived; paste an address you control to keep it. The relayer pays the fee and takes it from the withdrawal.</p>
                         <div className="row">
                           <button className="primary" onClick={() => withdraw(note)} disabled={!!busy}>Prove and withdraw</button>
                           <button className="link" onClick={() => setWithdrawing(null)}>Cancel</button>

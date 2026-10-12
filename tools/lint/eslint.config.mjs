@@ -13,7 +13,7 @@ export default [
       "**/dist/**",
       "**/target/**",
       "**/out/**",
-      "**/lib/**",
+      "tempo/lib/**",
       "**/build/**",
       "**/*_js/**",
       "mirror-pool/**",
