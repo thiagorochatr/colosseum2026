@@ -607,6 +607,61 @@ fn a_clearance_under_another_curator_is_refused() {
 }
 
 #[test]
+fn a_pool_of_another_denomination_cannot_be_created() {
+    let mut env = Env::new();
+    let payer = env.funded();
+    let other = DENOMINATION + 1;
+    let pool = pool_address(&env.program, other).0;
+    let vault = vault_address(&env.program, &pool).0;
+    let ix = Instruction::new_with_bytes(
+        env.program,
+        &MirrorIx::InitPool {
+            denomination: other,
+            entry_fee: 0,
+            k_floor: 2,
+            settle_timeout_seconds: 0,
+        }
+        .pack(),
+        vec![
+            AccountMeta::new(payer.pubkey(), true),
+            AccountMeta::new(pool, false),
+            AccountMeta::new(vault, false),
+            AccountMeta::new_readonly(SYSTEM, false),
+        ],
+    );
+    assert!(env.send(&[ix], &[&payer]).unwrap_err().contains(&code(107)));
+}
+
+#[test]
+fn another_pool_cannot_spend_against_this_pools_clean_set() {
+    // The attack one pool per deployment closes: a second pool, holding a
+    // commitment identical to a clean one here at the same index, proves its
+    // pool root together with THIS pool's clean root. The compliance program
+    // writes the clearance, since the curator holds that clean root, but the
+    // compliant pool pays only the pool it serves.
+    let (mut env, notes) = scenario();
+    let real = env.svm.get_account(&env.pool).unwrap();
+    let other = pool_address(&env.program, DENOMINATION + 1).0;
+    env.svm.set_account(other, real).unwrap();
+    let relay = env.funded();
+    let to = Pubkey::new_unique();
+    let req = env
+        .prove(&notes[0], 0, &[1], env.binding_for(&relay.pubkey(), &to))
+        .unwrap();
+    let curator = env.curator.pubkey();
+    let clearance = clearance_address(&COMPLIANCE_ID, &other, &curator, &req.inputs[2]).0;
+    let verify = env.verify_clearance_ix(&relay.pubkey(), &curator, &other, &req);
+    env.send(&[verify], &[&relay]).unwrap();
+    let mut spend = env.cleared_spend_ix(&relay.pubkey(), &notes[0], &to, clearance);
+    spend.accounts[1].pubkey = other;
+    spend.accounts[2].pubkey = spend_address(&env.program, &other, &notes[0].nullifier()).0;
+    assert!(env
+        .send(&[spend], &[&relay])
+        .unwrap_err()
+        .contains(&code(107)));
+}
+
+#[test]
 fn a_clearance_naming_a_fake_pool_is_refused() {
     // The compliance program does not check the pool's owner. This is why it
     // does not need to: the clearance names the fake account, not this pool.

@@ -19,6 +19,11 @@
       "program": "complianceProgram",
       "signature": "4rQiv67GG9aJ3JH88mSx62LZc8CtLDn3ftsEP598TDQFp6ssjtf1YLkYjgUgDgQcDUNENEVkKqcPKXSfmdtb8anM",
       "change": "The clearance address includes the curator's authority, and an existing clearance is always rewritten, so no other curator can rewrite one and no one can block a spend by writing its clearance first"
+    },
+    {
+      "program": "poolProgram",
+      "signature": "5EePdnxGBEcuhcDX2uPcKPo4tfEwXgPqhAUjPtWQjMxzpCFxPBWHD6QnxQtBRmkG5J1xHYAE55PdqRDfM1p1YK6d",
+      "change": "The compliant pool serves one pool, of the deployment's denomination: it refuses to create another and pays only from that one, since a curator's clean roots are not tied to a pool on chain"
     }
   ]
 }

@@ -3,12 +3,12 @@
 //! and the spend record it writes is byte-for-byte the one SubmitSpend writes,
 //! so mirror-pool's own SettleEpoch pays it out unchanged.
 
-use crate::{CompliantPoolError, COMPLIANCE_PROGRAM_ID, REQUIRED_CURATOR};
+use crate::{CompliantPoolError, COMPLIANCE_PROGRAM_ID, REQUIRED_CURATOR, REQUIRED_DENOMINATION};
 use compliance_interface::Clearance;
 use mirror_core::{action_binding, Field};
 use mirror_pool_program::{
     error::MirrorProgramError,
-    pda::{spend_address, SPEND_SEED},
+    pda::{pool_address, spend_address, SPEND_SEED},
     processor::{SELECTOR_INVOKE, SELECTOR_INVOKE_SIGNED, SELECTOR_TRANSFER},
     spend::{spend_len, Spend, MAX_PAYLOAD},
     state::Pool,
@@ -163,6 +163,10 @@ pub fn submit_cleared_spend(
     }
     if pool_account.owner != program_id {
         return Err(MirrorProgramError::InvalidOwner.into());
+    }
+    // Only the pool this deployment serves pays: see REQUIRED_DENOMINATION.
+    if *pool_account.key != pool_address(program_id, REQUIRED_DENOMINATION).0 {
+        return Err(CompliantPoolError::PoolNotServed.into());
     }
     Field::from_bytes(req.nullifier).map_err(MirrorProgramError::from)?;
 

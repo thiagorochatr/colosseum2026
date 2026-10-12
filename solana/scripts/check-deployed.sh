@@ -14,6 +14,7 @@ field() { node -p "JSON.parse(require('fs').readFileSync('deployments/devnet.jso
 
 export MIRROR_COMPLIANCE_PROGRAM_ID="$(field complianceProgram)"
 export MIRROR_REQUIRED_CURATOR="$(field curatorAuthority)"
+export MIRROR_DENOMINATION="$(field denomination)"
 OUT=$PWD/target/devnet
 make build-sbf SBF_TARGET_DIR="$OUT" >/dev/null
 

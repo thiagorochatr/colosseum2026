@@ -17,13 +17,13 @@ The compliance program, the compliant pool, and the bridge from snarkjs to `grot
 make verify   # lint, build both programs for SBF, and every test
 ```
 
-41 tests:
+43 tests:
 
 | Suite | Tests | What it covers |
 |---|---|---|
 | `verify_proof.rs` | 7 | The Groth16 layer on its own. |
 | `clearance.rs` | 16 | Curators and clearances against a stand-in pool. |
-| `flow.rs` | 13 | The compliant pool with the real mirror-pool program and real proofs: clear, spend and settle, plus every way to misuse a clearance. |
+| `flow.rs` | 15 | The compliant pool with the real mirror-pool program and real proofs: clear, spend and settle, plus every way to misuse a clearance. |
 | `bridge.rs` | 5 | The snarkjs reader. |
 
 | | Compute units |

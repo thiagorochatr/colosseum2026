@@ -11,6 +11,7 @@ solana-keygen new -o .demo/devnet/curator.json
 # 2. Build, bound to those ids, into a separate target directory.
 MIRROR_COMPLIANCE_PROGRAM_ID=$(solana-keygen pubkey .demo/devnet/compliance-program.json) \
 MIRROR_REQUIRED_CURATOR=$(solana-keygen pubkey .demo/devnet/curator.json) \
+MIRROR_DENOMINATION=100000000 \
 make build-sbf SBF_TARGET_DIR=$PWD/target/devnet
 
 # 3. Deploy both.

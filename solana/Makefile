@@ -8,6 +8,8 @@ SBF_TARGET_DIR := $(CURDIR)/target/sbf
 # builds with its own ids; see DEPLOY.md.
 export MIRROR_COMPLIANCE_PROGRAM_ID ?= $(shell solana-keygen pubkey tests/keys/compliance-program.json)
 export MIRROR_REQUIRED_CURATOR ?= $(shell solana-keygen pubkey tests/keys/curator.json)
+# The one pool a build serves; the tests use 1 SOL.
+export MIRROR_DENOMINATION ?= 1000000000
 
 all: verify
 

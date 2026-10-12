@@ -19,6 +19,8 @@ pub enum CompliantPoolError {
     StaleClearance = 105,
     /// The clearance's binding is not this spend's.
     BindingMismatch = 106,
+    /// This deployment serves one pool, of REQUIRED_DENOMINATION; this is another.
+    PoolNotServed = 107,
 }
 
 impl From<CompliantPoolError> for ProgramError {
