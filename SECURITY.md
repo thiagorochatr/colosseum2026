@@ -26,7 +26,7 @@ A second workflow checks the networks themselves, daily and on every push to `ma
 - **elliptic and the ethers v5 packages**, through circomlibjs, and elliptic again through crypto-browserify in the web app's Node polyfills. This project uses circomlibjs only for the Poseidon hash, and nothing in it signs or verifies with elliptic: viem and @solana/web3.js bring their own curve code. elliptic has no patched release.
 - **uuid and stream-json**, through jayson in @solana/web3.js 1.x. They parse JSON-RPC responses from this project's own RPC endpoint. Only @solana/web3.js 3 drops them, and that is a rewrite of the client API.
 
-The Rust tree is checked by `cargo deny` instead, and its one exception is written down in [solana/deny.toml](solana/deny.toml).
+The Rust tree is checked by `cargo deny` instead, and its six exceptions are written down, each with its reason, in [solana/deny.toml](solana/deny.toml): five unmaintained crates and one host-only advisory that reaches neither deployed program.
 
 ## Reporting a vulnerability
 

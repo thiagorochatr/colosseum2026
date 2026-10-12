@@ -217,7 +217,7 @@ A clearance is public evidence. Anyone, such as an offramp, a DEX or a transfer 
 - **Tempo:** the client rebuilds both trees from `Deposit`, `Excluded` and `Reincluded` events.
 - **Solana:** the client rebuilds the pool tree from history and the clean tree from the curator's latest accepted memo.
 - **Proving:** snarkjs with the circuit's `wasm` and the final `zkey`, in the browser or in Node.
-- **Verifying key:** both verifiers are generated from one `vk.json` by `circuits/scripts/regenerate-verifiers.sh`, which prints its sha256. CI regenerates both on every push and fails if either differs from the committed file, which is the check that the two chains verify the same statement.
+- **Verifying key:** both verifiers are generated from the one final `zkey` by `circuits/scripts/regenerate-verifiers.sh`: the Solidity verifier by snarkjs straight from the `zkey`, and the Solana module from its exported `vk.json`, whose sha256 the script prints. CI regenerates both on every push and fails if either differs from the committed file, which is the check that the two chains verify the same statement.
 
 ## 10. Confirmed on the real networks
 

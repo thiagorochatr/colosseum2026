@@ -10,9 +10,11 @@
 
 [advisories]
 version = 2
-# No blanket ignores. Every entry below is an *unmaintained* notice — not a
-# vulnerability — and each carries the reason it does not reach anything this
-# protocol depends on. An advisory with a security impact gets fixed, not listed.
+# No blanket ignores. Every entry below but the last is an *unmaintained*
+# notice — not a vulnerability — and each carries the reason it does not reach
+# anything this protocol depends on. The last is a vulnerability in a host-only
+# crate that a pinned upstream holds back, absent from both deployed programs.
+# Any other advisory with a security impact gets fixed, not listed.
 ignore = [
     # ansi_term — terminal colour codes, reached only through the CLI's argument
     # parser. It touches no key, no note and no proof, and its whole surface is

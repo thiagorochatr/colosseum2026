@@ -79,7 +79,7 @@ The script now calls snarkjs's `zKey.contribute` API from `contribute.mjs`, with
 
 Phase 2 has a single human contributor. The final key is sound if that contribution's entropy was destroyed, which only the contributor can attest to. The beacon does not change that: it stops the last contributor from choosing the result, but it does not replace an honest contribution. This is acceptable for test networks and is not enough for real value.
 
-The ceremony is open. Anyone can download `withdraw_final.zkey` from the release into `circuits/ceremony/`, add a contribution on top of it with `sh ceremony/contribute.sh "Your name" withdraw_final.zkey`, and apply a new announced beacon with `finalize.sh`. The verifiers on both chains are then regenerated from the result and redeployed.
+The ceremony is open. Anyone can download `withdraw_final.zkey` from the release into `circuits/ceremony/`, add a contribution on top of it with `sh ceremony/contribute.sh "Your name" withdraw_final.zkey`, which writes `withdraw_0003.zkey`, since the released key already holds two, the contribution and the beacon, and apply a new announced beacon with `finalize.sh`. The verifiers on both chains are then regenerated from the result and redeployed.
 
 The beacon's name in the transcript reads `(announced slot 45509:` because snarkjs keeps only the first 64 characters of a contribution's name. The slot is 455,095,000, as `beacon.json` records.
 

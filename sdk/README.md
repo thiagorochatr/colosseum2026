@@ -18,7 +18,7 @@ JavaScript (ES modules) shared by the command line, the end-to-end scripts and t
 - the Solana binding equals mirror-core's `action_binding`;
 - the Solana proof layout equals snarkjs-bridge's output, and the Solidity layout equals snarkjs's exporter;
 - the Tempo ABI matches the compiled pool;
-- the Solana PDAs and the policy hash are the ones already on devnet.
+- the Solana pool PDA is the one already on devnet, and the genesis policy document is in canonical form.
 
 ## Command line
 
