@@ -104,6 +104,7 @@ Next:
 | `docs/CEREMONY.md` | The trusted setup: the starting key, the contribution, the beacon and how to verify them. |
 | `docs/PROOF.md` | Every deployment and transaction on both test networks, with explorer links, and how to check them. |
 | `docs/ANONYMITY_COST.md` | How much anonymity each kind of clean-set policy costs, measured offline on real mainnet depositors. |
+| `docs/GO_TO_MARKET.md` | Who pays, how Alibi reaches them, and the next 90 days. |
 | `circuits/` | The withdraw circuit, frozen, with its tests. |
 | `tools/vectors/` | Test vectors for the circuit, computed with `mirror-core`. |
 | `tools/curation-cost/` | The measurement behind `docs/ANONYMITY_COST.md`, one offline command. |
