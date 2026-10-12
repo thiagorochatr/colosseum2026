@@ -155,7 +155,13 @@ impl Env {
     }
 
     fn clearance(&self, req: &ProofRequest) -> Pubkey {
-        clearance_address(&self.program, &self.pool, &req.inputs[2]).0
+        clearance_address(
+            &self.program,
+            &self.pool,
+            &self.authority.pubkey(),
+            &req.inputs[2],
+        )
+        .0
     }
 
     fn verify_clearance_at(
@@ -230,10 +236,13 @@ fn a_valid_proof_against_a_published_root_writes_a_clearance() {
 }
 
 #[test]
-fn a_clearance_cannot_be_written_twice_in_one_slot() {
+fn a_clearance_is_rewritten_in_the_same_slot_too() {
+    // Someone who sees the proof can write the clearance first, even in the
+    // relay's own slot. The relay's VerifyClearance must still go through.
     let (mut env, req) = ready();
     env.verify_clearance(&req).unwrap();
-    assert!(env.verify_clearance(&req).unwrap_err().contains(&code(10)));
+    env.svm.expire_blockhash();
+    env.verify_clearance(&req).unwrap();
 }
 
 #[test]

@@ -273,7 +273,7 @@ impl Env {
                 AccountMeta::new_readonly(self.curator_pda(curator), false),
                 AccountMeta::new_readonly(*pool, false),
                 AccountMeta::new(
-                    clearance_address(&COMPLIANCE_ID, pool, &req.inputs[2]).0,
+                    clearance_address(&COMPLIANCE_ID, pool, curator, &req.inputs[2]).0,
                     false,
                 ),
                 AccountMeta::new_readonly(SYSTEM, false),
@@ -326,7 +326,13 @@ impl Env {
     }
 
     fn clearance_of(&self, note: &Note) -> Pubkey {
-        clearance_address(&COMPLIANCE_ID, &self.pool, &note.nullifier()).0
+        clearance_address(
+            &COMPLIANCE_ID,
+            &self.pool,
+            &self.curator.pubkey(),
+            &note.nullifier(),
+        )
+        .0
     }
 
     /// Proves `note`, then verifies and spends in ONE transaction.
@@ -517,6 +523,26 @@ fn a_clearance_written_alone_in_an_earlier_slot_does_not_freeze_the_note() {
 }
 
 #[test]
+fn a_clearance_written_alone_in_the_same_slot_does_not_block_the_spend() {
+    // The same race inside one slot: someone lands VerifyClearance just before
+    // the relay. The relay's own VerifyClearance rewrites it and the spend lands.
+    let (mut env, notes) = scenario();
+    let relay = env.funded();
+    let squatter = env.funded();
+    let to = Pubkey::new_unique();
+    let req = env
+        .prove(&notes[0], 0, &[1], env.binding_for(&relay.pubkey(), &to))
+        .unwrap();
+    let curator = env.curator.pubkey();
+    let pool = env.pool;
+    let ix = env.verify_clearance_ix(&squatter.pubkey(), &curator, &pool, &req);
+    env.send(&[ix], &[&squatter]).unwrap();
+    let verify = env.verify_clearance_ix(&relay.pubkey(), &curator, &pool, &req);
+    let spend = env.cleared_spend_ix(&relay.pubkey(), &notes[0], &to, env.clearance_of(&notes[0]));
+    env.send(&[verify, spend], &[&relay]).unwrap();
+}
+
+#[test]
 fn a_clearance_for_another_beneficiary_does_not_match() {
     let (mut env, notes) = scenario();
     let relay = env.funded();
@@ -569,9 +595,13 @@ fn a_clearance_under_another_curator_is_refused() {
         .prove(&notes[0], 0, &[], env.binding_for(&relay.pubkey(), &to))
         .unwrap();
     let pool = env.pool;
+    // The other curator's clearance lives at its own address, so it cannot
+    // overwrite the one naming this pool's curator; handed to the pool, it is refused.
+    let theirs = clearance_address(&COMPLIANCE_ID, &pool, &other.pubkey(), &req.inputs[2]).0;
+    assert_ne!(theirs, env.clearance_of(&notes[0]));
     let ixs = [
         env.verify_clearance_ix(&relay.pubkey(), &other.pubkey(), &pool, &req),
-        env.cleared_spend_ix(&relay.pubkey(), &notes[0], &to, env.clearance_of(&notes[0])),
+        env.cleared_spend_ix(&relay.pubkey(), &notes[0], &to, theirs),
     ];
     assert!(env.send(&ixs, &[&relay]).unwrap_err().contains(&code(104)));
 }
@@ -598,7 +628,7 @@ fn a_clearance_naming_a_fake_pool_is_refused() {
         .prove(&notes[0], 0, &[1], env.binding_for(&relay.pubkey(), &to))
         .unwrap();
     let curator = env.curator.pubkey();
-    let fake_clearance = clearance_address(&COMPLIANCE_ID, &fake, &req.inputs[2]).0;
+    let fake_clearance = clearance_address(&COMPLIANCE_ID, &fake, &curator, &req.inputs[2]).0;
     let ixs = [
         env.verify_clearance_ix(&relay.pubkey(), &curator, &fake, &req),
         env.cleared_spend_ix(&relay.pubkey(), &notes[0], &to, fake_clearance),
@@ -630,11 +660,12 @@ fn a_note_cannot_be_spent_twice() {
     let to = Pubkey::new_unique();
     env.clear_and_spend(&relay, &notes[0], 0, &[1], &to)
         .unwrap();
-    // A second clearance for the same nullifier cannot even be written.
+    // A second clearance can be written, but the spend after it hits
+    // mirror-pool's nullifier guard: the spend record already exists.
     let err = env
         .clear_and_spend(&relay, &notes[0], 0, &[1], &to)
         .unwrap_err();
-    assert!(err.contains(&code(10)), "{err}");
+    assert!(err.contains(&code(15)), "{err}");
     // And a spend reusing the existing clearance hits mirror-pool's nullifier guard.
     let ix = env.cleared_spend_ix(&relay.pubkey(), &notes[0], &to, env.clearance_of(&notes[0]));
     let err = env.send(&[ix], &[&relay]).unwrap_err();

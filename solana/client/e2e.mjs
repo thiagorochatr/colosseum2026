@@ -95,7 +95,7 @@ async function clearAndSpend(name) {
   const sig = await send(
     [
       ixs.verifyClearance(compliance, relay.publicKey, curator.publicKey, pool, toSolana(proof), inputs),
-      ixs.submitClearedSpend(poolProgram, compliance, relay.publicKey, pool, nullifier, beneficiary, FEE),
+      ixs.submitClearedSpend(poolProgram, compliance, curator.publicKey, relay.publicKey, pool, nullifier, beneficiary, FEE),
     ],
     [relay],
   );

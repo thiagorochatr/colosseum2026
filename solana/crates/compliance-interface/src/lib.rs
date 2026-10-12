@@ -85,8 +85,23 @@ pub fn curator_address(program_id: &Pubkey, authority: &Pubkey) -> (Pubkey, u8) 
     Pubkey::find_program_address(&[CURATOR_SEED, authority.as_ref()], program_id)
 }
 
-pub fn clearance_address(program_id: &Pubkey, pool: &Pubkey, nullifier: &[u8; 32]) -> (Pubkey, u8) {
-    Pubkey::find_program_address(&[CLEARANCE_SEED, pool.as_ref(), nullifier], program_id)
+/// A clearance per pool, curator and nullifier. With the curator in the seeds,
+/// no other curator can write over the clearance that names this one.
+pub fn clearance_address(
+    program_id: &Pubkey,
+    pool: &Pubkey,
+    curator_authority: &Pubkey,
+    nullifier: &[u8; 32],
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            CLEARANCE_SEED,
+            pool.as_ref(),
+            curator_authority.as_ref(),
+            nullifier,
+        ],
+        program_id,
+    )
 }
 
 fn read32(data: &[u8], at: usize) -> [u8; 32] {

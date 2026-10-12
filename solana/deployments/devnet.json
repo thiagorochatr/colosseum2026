@@ -14,6 +14,11 @@
       "program": "complianceProgram",
       "signature": "kyWiatjdkNaRRNHAybMLsf5w1U24tgogcyBRHKK7YXB6XzGCjWa1tceZnvfzJ5RFFhhJfX2EYvFPdM6uQRtJ4PA",
       "change": "VerifyClearance replaces a clearance written in an earlier slot instead of refusing it, so a clearance written alone from a seen proof cannot freeze the note"
+    },
+    {
+      "program": "complianceProgram",
+      "signature": "4rQiv67GG9aJ3JH88mSx62LZc8CtLDn3ftsEP598TDQFp6ssjtf1YLkYjgUgDgQcDUNENEVkKqcPKXSfmdtb8anM",
+      "change": "The clearance address includes the curator's authority, and an existing clearance is always rewritten, so no other curator can rewrite one and no one can block a spend by writing its clearance first"
     }
   ]
 }

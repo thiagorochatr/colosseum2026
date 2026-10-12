@@ -277,27 +277,25 @@ fn verify_clearance(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) 
     if !pool_knows(&pool.try_borrow_data()?, &pool_root) {
         return Err(ComplianceError::UnknownPoolRoot.into());
     }
-    let (expected, bump) = clearance_address(program_id, pool.key, &nullifier);
+    let (expected, bump) = clearance_address(program_id, pool.key, &curator_authority, &nullifier);
     if *clearance_account.key != expected {
         return Err(ComplianceError::InvalidAccount.into());
     }
-    // A clearance is good for the slot it was written in, since a spend must
-    // consume it in that same slot. One left over from an earlier slot, by a
-    // spend that never followed or by someone who sent VerifyClearance alone
-    // with a proof they saw, is overwritten: refusing it would freeze the note
-    // for good. A spent note gains nothing from this, as its spend record
-    // already exists and the pool refuses a second spend.
+    // A clearance records the latest verification of this proof under this
+    // curator, and a spend must consume it in the slot it was written. So a
+    // clearance already there is always rewritten, never refused: refusing it
+    // would let anyone who saw the proof freeze the note by writing it first.
+    // The curator is in the address, so no other curator can rewrite this one.
+    // A spent note gains nothing, as its spend record already exists and the
+    // pool refuses a second spend.
     let slot = Clock::get()?.slot;
     let replace = !clearance_account.data_is_empty();
     if replace {
         if clearance_account.owner != program_id {
             return Err(ComplianceError::InvalidAccount.into());
         }
-        let earlier = Clearance::read(&clearance_account.try_borrow_data()?)
+        Clearance::read(&clearance_account.try_borrow_data()?)
             .ok_or(ComplianceError::InvalidAccount)?;
-        if earlier.slot == slot {
-            return Err(ComplianceError::ClearanceExists.into());
-        }
     }
 
     verify(&req)?;
@@ -309,7 +307,13 @@ fn verify_clearance(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) 
             system,
             clearance::LEN,
             program_id,
-            &[CLEARANCE_SEED, pool.key.as_ref(), &nullifier, &[bump]],
+            &[
+                CLEARANCE_SEED,
+                pool.key.as_ref(),
+                curator_authority.as_ref(),
+                &nullifier,
+                &[bump],
+            ],
         )?;
     }
     let mut d = clearance_account.try_borrow_mut_data()?;

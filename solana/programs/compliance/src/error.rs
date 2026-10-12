@@ -24,7 +24,7 @@ pub enum ComplianceError {
     UnknownPoolRoot = 8,
     /// The curator never published this root, or revoked it.
     StaleCleanRoot = 9,
-    /// A clearance for this pool and nullifier was already written in this slot.
+    /// No longer returned: a clearance is rewritten, never refused. Kept so the codes after it stay put.
     ClearanceExists = 10,
     /// A counter would overflow.
     ArithmeticOverflow = 11,
