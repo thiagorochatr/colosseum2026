@@ -50,8 +50,10 @@ pub mod curator {
     pub const LEN: usize = at::END;
 }
 
-/// A clearance: proof that pool `pool` spent `nullifier`, bound to `binding`,
-/// under a clean root of curator `curator_authority`, verified in `slot`.
+/// A clearance: the latest verification of a proof for `nullifier` in pool
+/// `pool`, bound to `binding`, under a clean root of curator
+/// `curator_authority`, in `slot`. Whether the note was spent is the pool's
+/// spend record's to say.
 pub mod clearance {
     pub const VERSION: u8 = 1;
     pub mod at {

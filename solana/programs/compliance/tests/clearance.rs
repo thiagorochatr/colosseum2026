@@ -1,8 +1,8 @@
 //! Curators and clearances, in a real SVM, against the built program.
 //!
 //! The pool here is a stand-in account with mirror-pool's layout holding the
-//! vectors' pool root. tests/mirror_pool.rs runs the same flow against the
-//! real mirror-pool program.
+//! vectors' pool root. programs/compliant-pool/tests/flow.rs runs the same
+//! flow against the real mirror-pool program.
 
 use compliance_interface::{clearance_address, curator_address, mirror_pool, tag, Clearance};
 use compliance_program::verify::ProofRequest;
@@ -324,6 +324,43 @@ fn only_the_authority_can_publish_or_revoke() {
 }
 
 #[test]
+fn a_curator_owned_by_another_program_is_refused() {
+    // A curator's address is not derived when it is read, so its owner is what
+    // makes it this program's. A copy owned elsewhere, with the same authority
+    // and the same root, can neither take a root nor clear a proof.
+    let (mut env, req) = ready();
+    let real = env.svm.get_account(&env.curator()).unwrap();
+    let fake = Pubkey::new_unique();
+    env.svm
+        .set_account(
+            fake,
+            Account {
+                owner: Pubkey::new_unique(),
+                ..real
+            },
+        )
+        .unwrap();
+    let mut ix = env.curator_ix(tag::PUBLISH_ROOT, &[1u8; 32], &env.authority.pubkey());
+    ix.accounts[1].pubkey = fake;
+    let a = env.authority.insecure_clone();
+    assert!(env.send(ix, &[&a]).unwrap_err().contains(&code(5)));
+
+    let ix = Instruction::new_with_bytes(
+        env.program,
+        &[&[tag::VERIFY_CLEARANCE][..], &req.encode()].concat(),
+        vec![
+            AccountMeta::new(env.payer.pubkey(), true),
+            AccountMeta::new_readonly(fake, false),
+            AccountMeta::new_readonly(env.pool, false),
+            AccountMeta::new(env.clearance(&req), false),
+            AccountMeta::new_readonly(SYSTEM, false),
+        ],
+    );
+    let p = env.payer.insecure_clone();
+    assert!(env.send(ix, &[&p]).unwrap_err().contains(&code(5)));
+}
+
+#[test]
 fn a_curator_is_created_once() {
     let mut env = Env::new();
     env.init_curator().unwrap();
@@ -344,7 +381,7 @@ fn the_ring_keeps_the_last_32_roots() {
     for i in 0..31u8 {
         env.publish([i + 1; 32]).unwrap();
     }
-    // 32 roots published since the real one: it is the oldest, still held.
+    // 31 roots published since the real one: it is the oldest of 32, still held.
     env.verify_clearance(&req).unwrap();
     let mut env2 = Env::new();
     env2.init_curator().unwrap();

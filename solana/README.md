@@ -14,23 +14,27 @@ The compliance program, the compliant pool, and the bridge from snarkjs to `grot
 ## Build and test
 
 ```sh
-make verify   # lint, build both programs for SBF, and every test
+make verify       # lint, the test build of both programs for SBF, and every test
+make build-test   # the SBF build the tests load, bound to the public keys in tests/keys/
+make build-sbf    # a deployment build: refuses unless its ids are set, see DEPLOY.md
 ```
 
-43 tests:
+45 tests:
 
 | Suite | Tests | What it covers |
 |---|---|---|
 | `verify_proof.rs` | 7 | The Groth16 layer on its own. |
-| `clearance.rs` | 16 | Curators and clearances against a stand-in pool. |
-| `flow.rs` | 15 | The compliant pool with the real mirror-pool program and real proofs: clear, spend and settle, plus every way to misuse a clearance. |
+| `clearance.rs` | 17 | Curators and clearances against a stand-in pool. |
+| `flow.rs` | 16 | The compliant pool with the real mirror-pool program and real proofs: clear, spend and settle, plus every way to misuse a clearance. |
 | `bridge.rs` | 5 | The snarkjs reader. |
 
 | | Compute units |
 |---|---|
 | `VerifyProof` | 96,954 |
-| `VerifyClearance` | 109,552 |
-| `VerifyClearance` + `SubmitClearedSpend`, one transaction | 121,441 |
+| `VerifyClearance`, on devnet | 111,461 |
+| `VerifyClearance` + `SubmitClearedSpend`, one transaction, on devnet | 126,407 |
+
+The two devnet figures are from alice's spend in the run below, and vary by a few thousand from one note to the next: finding the clearance's and the spend record's addresses costs more for some nullifiers.
 
 ## Live on devnet
 
@@ -43,25 +47,30 @@ Deployed on 2026-10-10. See [`DEPLOY.md`](DEPLOY.md) for how.
 | Pool, 0.1 SOL | [`4RwTZq6ucSEDWEQZ6RSfa1ruhqEayS4QsF6LVPA7yvGP`](https://explorer.solana.com/address/4RwTZq6ucSEDWEQZ6RSfa1ruhqEayS4QsF6LVPA7yvGP?cluster=devnet) |
 | Required curator | [`AdUihuLoEVQyyirSHLrrLMRvctXeFihqTQyGyV1sv5fA`](https://explorer.solana.com/address/AdUihuLoEVQyyirSHLrrLMRvctXeFihqTQyGyV1sv5fA?cluster=devnet) |
 
-`client/e2e.mjs` ran the whole flow there:
+The pool and the curator were created on 2026-10-10, before the three upgrades in `deployments/devnet.json`:
 
 | Step | Transaction |
 |---|---|
 | init pool | [4cQzPc3QUH…](https://explorer.solana.com/tx/4cQzPc3QUH5pYBi2Za6isssK49oEfBbshxmcNNYdP9M9qX2v6sBiLhwmUDbF4gddii2p5EBtTZaYko2Tqm4TJJoP?cluster=devnet) |
 | curator created | [3HhKyduZnH…](https://explorer.solana.com/tx/3HhKyduZnHBTPtnitDLfb4t13zy9sSmCT2fUD8s1CwHoZDPWjgZcPXjzna3Tnv8JYLuvVQHshkU34YSzRRStMyKj?cluster=devnet) |
-| deposit by alice | [3a7xSsjiBY…](https://explorer.solana.com/tx/3a7xSsjiBYe3cvN5615QZ5VM22MHKaKbjJhByQ2uxoKnZVQfkrxnoi4hgcLcqKoxSrc6Wf8oVcv5yFnF9UzYfy57?cluster=devnet) |
-| deposit by bob | [4iDQNACZ1X…](https://explorer.solana.com/tx/4iDQNACZ1XuhdWrfp4Fu2nXCvtr4ZvuLMPsirGZbGBjEQCed4w875q274CPkF5awr6kC9gSbGwTQKDtmiYUMu3Ua?cluster=devnet) |
-| deposit by carol | [3br7bKE2AH…](https://explorer.solana.com/tx/3br7bKE2AHVJCsPVvsa5iM5DRaDLiWTNVYU6niybuJeEEnhYmo3jVxUofcyGA78wEgB89VuPqdLk6bT8w1QXXXq3?cluster=devnet) |
-| curator publishes the clean root, excluding [1] | [2gdX7JkypR…](https://explorer.solana.com/tx/2gdX7JkypRJmbWAk5REJj6NY6f8vY66h7sQ7Kina5wMfdzSqKLnE1KyZpYeAiUFudjMYhhfo6tjU6gjkx1FERWAW?cluster=devnet) |
-| alice's note cleared and spent, one transaction | [2ZSfUaEubj…](https://explorer.solana.com/tx/2ZSfUaEubjwd5nTw5WGUFPU2qEjMR7FMHGCWSjdfGePh3zc2ioc7mL6JNs64Pbmua1iRY3wuXi7XAs7vfmEZiKTK?cluster=devnet) |
-| carol's note cleared and spent, one transaction | [1JjBt2pEZy…](https://explorer.solana.com/tx/1JjBt2pEZyajJq2SP8aFCiYXSQJ8YrzauJTfuJn7dXv45PPZ4peQimTmZKipUWseX2fGspVZZs7Yaa914SNGgGV?cluster=devnet) |
-| mirror-pool settles both spends in one batch | [2h8PTfPf15…](https://explorer.solana.com/tx/2h8PTfPf15447LPgELAayvDaggPt7Hbc6Lqmx2ouPsBEyBXHjRD61YpxDbpUPL7bRYjVJ1zVNiTEmDbHe6Zi7wvn?cluster=devnet) |
+
+`client/e2e.mjs` then ran the whole flow again on 2026-10-12, against the programs as upgraded:
+
+| Step | Transaction |
+|---|---|
+| deposit by alice | [37QrZSbG7Y…](https://explorer.solana.com/tx/37QrZSbG7YEFGmi4GZ1GQLhb8oz6xebHRuX9F4pxS7bDnRQikHUU2M94rUNYU3Rdvg1q5uDuW76gn2jVS7ED5Qdf?cluster=devnet) |
+| deposit by bob | [39NvJAE2Bv…](https://explorer.solana.com/tx/39NvJAE2BvwhWhB6nKxZ3NrTu6hSGL3PFGjhPEtpBk1bdWKJeJ8YWdUc8eKnToR1TB3o6MzhacWbhWaCx8WXFQnb?cluster=devnet) |
+| deposit by carol | [N43Z2YUZtP…](https://explorer.solana.com/tx/N43Z2YUZtPVVeTfA4YsB13iEsj81QGNjirq2K3takatzkYfnFQp44M5gj1rf1moSFwNSLXrrfT6jLJa1aa2zJyT?cluster=devnet) |
+| curator publishes the clean root, excluding bob's deposits [1, 22] | [5tY1jfMNkW…](https://explorer.solana.com/tx/5tY1jfMNkWCbfFpK4HRd7H6c4bwZMoFBb7CUNL5HQwpHJUz36CQexFyn6Pm8wEZWHyTKV9WCBrzp8f4teupQ98eX?cluster=devnet) |
+| alice's note cleared and spent, one transaction | [3JTkP82dMB…](https://explorer.solana.com/tx/3JTkP82dMB8PBbVb6MB3TcamePA2FGrrASTx7cv9KDVvLJ7dLtjftRbyEGKTB1csAAnN3TZXDCHUynMn5RyQWcmh?cluster=devnet) |
+| carol's note cleared and spent, one transaction | [5G9UyDsLen…](https://explorer.solana.com/tx/5G9UyDsLenjovrXC5KAv3pYjMtuSjYNVHuPBswQpg3BWweCcv2SGBTVJFtwFTMmvtoJvd3cL2fAfZKo5hZhp64Sy?cluster=devnet) |
+| mirror-pool settles both spends in one batch | [3fjFeczHDC…](https://explorer.solana.com/tx/3fjFeczHDCsmaw2kmAH2fAf6Jmt1K4wrfp87xT4zTot34U3MTmRWudkqJrbvMco4j25UAxXhX7RxfEn1a5GxuxDe?cluster=devnet) |
 
 Read back from devnet afterwards:
 
-- **The pool:** 3 deposits and 2 settled spends, owned by the compliant pool program.
+- **The pool:** owned by the compliant pool program, holding these 3 deposits among the demo's, 24 in all.
 - **Each fresh beneficiary:** holds 0.099 SOL, the denomination minus the relay's fee.
-- **The curator:** its account is owned by the compliance program, at epoch 0 at that point. Each block in the demo has moved it forward since.
-- **Bob's note:** cannot be proved against the published clean set.
+- **The curator:** its account is owned by the compliance program, at epoch 3, each block in the demo having moved it forward.
+- **Bob's note:** cannot be proved against the published clean set: the circuit fails at the clean-root check.
 
 The full record is `deployments/devnet-e2e.json`. The curator's clean set in force is the memo of its latest publication, on chain, and its genesis policy is `deployments/devnet-policy.json`.

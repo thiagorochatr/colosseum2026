@@ -3,9 +3,11 @@
 //! and SubmitClearedSpend between them, with real proofs from the ceremony's
 //! final key made through the SDK.
 
-use compliance_interface::{clearance_address, curator_address, tag, Clearance};
+use compliance_interface::{clearance, clearance_address, curator_address, tag, Clearance};
 use compliance_program::verify::ProofRequest;
-use compliant_pool_program::{cleared::ClearedSpend, TAG_SUBMIT_CLEARED_SPEND};
+use compliant_pool_program::{
+    cleared::ClearedSpend, REQUIRED_CURATOR, REQUIRED_DENOMINATION, TAG_SUBMIT_CLEARED_SPEND,
+};
 use litesvm::LiteSVM;
 use mirror_core::{action_binding, commitment, nullifier, poseidon2, Field, MerkleTree};
 use mirror_pool_program::{
@@ -25,7 +27,8 @@ use solana_transaction::Transaction;
 use std::process::Command;
 
 const SYSTEM: Pubkey = solana_system_interface::program::ID;
-const DENOMINATION: u64 = 1_000_000_000;
+/// The one pool the build serves, from the same MIRROR_DENOMINATION.
+const DENOMINATION: u64 = REQUIRED_DENOMINATION;
 const FEE: u64 = 5_000_000;
 const COMPLIANCE_ID: Pubkey = Pubkey::from_str_const(env!("MIRROR_COMPLIANCE_PROGRAM_ID"));
 
@@ -239,6 +242,12 @@ impl Env {
             ])
             .output()
             .expect("node");
+        // prove.mjs fails loudly on anything but a refusal at the clean-root check.
+        assert!(
+            out.status.success(),
+            "prove.mjs failed:\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
         let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("prover output");
         if !v["ok"].as_bool().unwrap() {
             return None;
@@ -479,6 +488,50 @@ fn a_spend_without_a_clearance_is_refused() {
         env.clearance_of(&notes[0]),
     );
     assert!(env.send(&[ix], &[&relay]).unwrap_err().contains(&code(101)));
+}
+
+#[test]
+fn a_clearance_owned_by_another_program_is_refused() {
+    // The clearance this spend needs, byte for byte, in this slot and at its
+    // address, but owned by another program: anyone can create such an
+    // account. Owned by the compliance program, the same bytes would pay, so
+    // the owner check is all that refuses it.
+    let (mut env, notes) = scenario();
+    let relay = env.funded();
+    let to = Pubkey::new_unique();
+    assert_eq!(env.curator.pubkey(), REQUIRED_CURATOR);
+    let slot = env.svm.get_sysvar::<solana_program::clock::Clock>().slot;
+    let binding = env.binding_for(&relay.pubkey(), &to).to_bytes();
+    let mut data = vec![0u8; clearance::LEN];
+    {
+        use clearance::at;
+        data[at::VERSION] = clearance::VERSION;
+        data[at::SLOT..at::SLOT + 8].copy_from_slice(&slot.to_le_bytes());
+        data[at::POOL..at::POOL + 32].copy_from_slice(env.pool.as_ref());
+        data[at::CURATOR_AUTHORITY..at::CURATOR_AUTHORITY + 32]
+            .copy_from_slice(REQUIRED_CURATOR.as_ref());
+        data[at::NULLIFIER..at::NULLIFIER + 32].copy_from_slice(&notes[0].nullifier());
+        data[at::BINDING..at::BINDING + 32].copy_from_slice(&binding);
+    }
+    let forged = |owner| Account {
+        lamports: 1_000_000_000,
+        data: data.clone(),
+        owner,
+        executable: false,
+        rent_epoch: 0,
+    };
+    let address = env.clearance_of(&notes[0]);
+    env.svm
+        .set_account(address, forged(Pubkey::new_unique()))
+        .unwrap();
+    let ix = env.cleared_spend_ix(&relay.pubkey(), &notes[0], &to, address);
+    assert!(env
+        .send(std::slice::from_ref(&ix), &[&relay])
+        .unwrap_err()
+        .contains(&code(101)));
+    // The control: in the same slot, only the owner changed, and it pays.
+    env.svm.set_account(address, forged(COMPLIANCE_ID)).unwrap();
+    env.send(&[ix], &[&relay]).unwrap();
 }
 
 #[test]

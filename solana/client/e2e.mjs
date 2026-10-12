@@ -11,16 +11,16 @@
 // 5. Bob's note cannot be proved.
 
 import { randomBytes } from "node:crypto";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { FIELD, hasher } from "../../sdk/src/tree.mjs";
 import { prove, terminate } from "../../sdk/src/prove.mjs";
 import * as S from "../../sdk/src/solana.mjs";
 import { actionBinding, toSolana } from "../../sdk/src/solana.mjs";
 import {
-  NETWORK, ROOT, PublicKey, Keypair, SystemProgram, be32, connection, demoKeypair, explorer, ixs, poolAddress,
-  readDeployment, send, syncPool, wallet, writeDeployment,
+  NETWORK, ROOT, PublicKey, Keypair, SystemProgram, be32, connection, demoKeypair, deploymentFile, explorer, ixs,
+  poolAddress, readDeployment, send, syncPool, wallet, writeDeployment,
 } from "./common.mjs";
-import { curatorKeypair, init as initCurator, publish } from "./curator.mjs";
+import { curatorKeypair, currentBlocklist, init as initCurator, publish } from "./curator.mjs";
 
 const d = readDeployment();
 const poolProgram = new PublicKey(d.poolProgram);
@@ -56,7 +56,10 @@ if (!(await connection.getAccountInfo(pool))) {
   record("init pool", await send([ixs.initPool(poolProgram, funder.publicKey, denomination, 2)], [funder]));
 }
 writeDeployment("", { ...d, pool: pool.toBase58() });
-writeDeployment("policy", S.policyDocument([users.bob.publicKey.toBase58()]));
+// The genesis policy the curator account is bound to. Written once: after
+// that it is a record, and the policy in force lives in the curator's memos.
+const bob = users.bob.publicKey.toBase58();
+if (!existsSync(deploymentFile("policy"))) writeDeployment("policy", S.policyDocument([bob]));
 const created = await initCurator();
 if (!created.existed) steps.push({ step: "curator created", signature: created.sig, link: explorer(created.sig) });
 
@@ -74,13 +77,21 @@ mkdirSync(`${ROOT}.demo/${NETWORK}`, { recursive: true });
 writeFileSync(`${ROOT}.demo/${NETWORK}/notes.json`, JSON.stringify(notes, (_, v) => (typeof v === "bigint" ? v.toString() : v), 2), { mode: 0o600 });
 
 // ------------------------------------------------- 2. the curator publishes
-const published = await publish();
+// The blocklist in force plus Bob, whatever earlier runs left. Adding him
+// starts a new epoch, as `curator.mjs block` does, so no earlier root survives.
+const inForce = await currentBlocklist();
+const published = await publish([...inForce, bob], { revoke: !inForce.includes(bob) });
 record(`curator publishes the clean root, excluding [${published.excluded}]`, published.sig);
 published.clean_root = published.cleanRoot.toString(16).padStart(64, "0");
 
 // -------------------------------------- 3. prove, clear and spend via the relay
 const synced = await syncPool(poolProgram, pool);
-const indexOf = (note) => synced.leaves.findIndex((l) => l === h3(note.k, note.r, denomination));
+const indexOf = (note) => {
+  const i = synced.leaves.findIndex((l) => l === h3(note.k, note.r, denomination));
+  if (i < 0) throw new Error("a note deposited in this run is not in the pool's history");
+  return i;
+};
+if (!published.excluded.includes(indexOf(notes.bob))) throw new Error("the published clean set does not exclude Bob");
 const spends = [];
 async function clearAndSpend(name) {
   const note = notes[name];
@@ -114,12 +125,20 @@ for (const s of spends) {
 }
 
 // ------------------------------------------------- 5. Bob's note is refused
+// The witness generator reports the failed constraint's line. Only a failure
+// at the clean-root check counts: a missing file or a typo must not pass.
+const circuit = readFileSync(`${ROOT}../circuits/withdraw.circom`, "utf8").split("\n");
+const cleanRootLine = circuit.findIndex((l) => l.includes("cleanRoot === cleanTree.root")) + 1;
+const bobIndex = indexOf(notes.bob);
 let refused = false;
+const seen = [];
 const quiet = { log: console.log, error: console.error };
-console.log = console.error = () => {};
+console.log = console.error = (...a) => seen.push(a.join(" "));
 try {
-  await prove({ note: notes.bob, index: indexOf(notes.bob), poolLeaves: synced.leaves, excluded: published.excluded, binding: 1n }, proving);
-} catch {
+  await prove({ note: notes.bob, index: bobIndex, poolLeaves: synced.leaves, excluded: published.excluded, binding: 1n }, proving);
+} catch (e) {
+  const line = Number((seen.join("\n") + String(e?.message)).match(/line: (\d+)/)?.[1]);
+  if (line !== cleanRootLine) throw new Error(`Bob's proof failed, but not at the clean-root check: ${e?.message}`, { cause: e });
   refused = true;
 } finally {
   Object.assign(console, quiet);
