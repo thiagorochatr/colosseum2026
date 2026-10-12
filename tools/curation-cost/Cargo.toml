@@ -1,0 +1,13 @@
+[package]
+name = "curation-cost"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+description = "What a curation policy costs a privacy pool's anonymity set, measured on the committed mainnet samples with mirror-provenance"
+
+# Standalone: not a member of mirror-pool's workspace, so the imported tree stays untouched.
+[workspace]
+
+[dependencies]
+mirror-provenance = { path = "../../mirror-pool/crates/mirror-provenance" }

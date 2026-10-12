@@ -21,7 +21,7 @@ forge test --network tempo
 | `test/Poseidon.t.sol` | `poseidon-solidity` against the circomlib vector, the zero ladder, and the pool and clean roots of the circuit's test vectors. |
 | `test/Tip403.t.sol` | TIP-20 token creation and the TIP-403 checks the pool relies on, including blacklist, whitelist and compound policies. |
 | `src/CompliantPool.sol` | The pool. Deposit, permissionless `exclude` and `reinclude` checked against the registry, and withdraw with a proof. |
-| `test/CompliantPool.t.sol` | 12 scenarios with real proofs from the final key, made through the SDK by `vm.ffi`. |
+| `test/CompliantPool.t.sol` | 13 scenarios with real proofs from the final key, made through the SDK by `vm.ffi`. |
 | `script/Deploy.s.sol` | Deploys the verifier and a pool, and records the addresses. |
 | `e2e/` | The issuer's setup and the full flow on a real node. |
 | `relayer/relayer.mjs` | Submits withdrawals and pays the gas. The pool pays it the fee bound into the proof. |
