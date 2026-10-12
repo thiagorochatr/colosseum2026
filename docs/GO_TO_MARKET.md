@@ -64,3 +64,8 @@ We have not run customer interviews yet; they are the first item below. What we 
 3. A pilot issuer on Tempo, and the TIP proposal.
 4. Integration PRs to Cloak and Privacy Cash, and one compliance provider publishing clean sets.
 5. On Solana: ragequit for excluded depositors, and SPL and Token-2022 pools.
+
+## Team
+
+- **Thiago Rocha**: protocol, circuit, contracts and app. Cryptography R&D at Banco Inter; researches programmable cryptography; built mirror-pool, winner of Superteam Brasil's Build Privacy-Through-Noise bounty.
+- **Stefany Lopes**: product and go-to-market. Product and project manager in Web3 since 2021, with a background in product design; 2× hackathon winner (Radar, ORE track; Crecimiento Argentina).
