@@ -66,6 +66,11 @@ test("a sweep excludes newly blocked depositors and reincludes unblocked ones, a
   assert.equal(calls[0].data.slice(0, 10), toFunctionSelector("exclude(uint256)"));
   assert.equal(calls[1].data.slice(0, 10), toFunctionSelector("reinclude(uint256)"));
   assert.equal(BigInt(`0x${calls[0].data.slice(10)}`), 1n);
+
+  const many = { pool, exclude: [0, 1, 2, 3, 4], reinclude: [5, 6, 7, 8] };
+  assert.deepEqual(tempo.sweepBatches(many).map((b) => b.length), [4, 4, 1], "at most four calls per transaction");
+  assert.deepEqual(tempo.sweepBatches(many).flat(), tempo.sweepCalls(many), "in the same order");
+  assert.deepEqual(tempo.sweepBatches({ pool, exclude: [], reinclude: [] }), []);
 });
 
 test("the Solana PDAs are the ones already on devnet", () => {
@@ -101,6 +106,21 @@ test("a curator memo is accepted only with a held root and the curator's policy 
   assert.equal(solana.acceptMemo(memo, PublicKey.default, state), null, "another pool");
   const v1 = JSON.stringify({ v: 1, pool: pool.toBase58(), n: 4, x: [1, 3], b: blocklist, r: "4d" });
   assert.equal(solana.acceptMemo(v1, pool, state), null, "the old memo, with no policy document");
+
+  // Anyone can write any memo next to the curator account: malformed ones are refused, never thrown on.
+  const body = JSON.parse(memo);
+  const forged = (patch) => JSON.stringify({ ...body, ...patch });
+  for (const [why, text] of [
+    ["not JSON", "{"],
+    ["no root", forged({ r: undefined })],
+    ["a root that is not hex", forged({ r: "zz" })],
+    ["an empty policy", forged({ policy: {} })],
+    ["an excluded index past the deposit count", forged({ x: [1, 4] })],
+    ["excluded indices out of order", forged({ x: [3, 1] })],
+    ["a negative deposit count", forged({ n: -1 })],
+  ]) {
+    assert.equal(solana.acceptMemo(text, pool, state), null, why);
+  }
 });
 
 test("the Solana instruction data have the programs' exact lengths", () => {

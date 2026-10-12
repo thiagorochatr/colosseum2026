@@ -33,8 +33,7 @@ export const genesisBlocklist = () => readDeployment("policy").blocklist;
 
 export async function currentBlocklist() {
   const { compliance, pool } = programs();
-  const set = await S.readCleanSet(connection, compliance, curatorKeypair().publicKey, pool);
-  return set?.blocklist ?? genesisBlocklist();
+  return S.blocklistInForce(connection, compliance, curatorKeypair().publicKey, pool, genesisBlocklist());
 }
 
 export async function init() {

@@ -43,7 +43,9 @@ export function solanaChain(cfg) {
     },
 
     async pool() {
-      const [s, set] = await Promise.all([S.syncPool(connection, program, pool), S.readCleanSet(connection, compliance, curator, pool)]);
+      // The memo must rebuild, from the pool's own leaves, to the root it names.
+      const s = await S.syncPool(connection, program, pool);
+      const set = await S.readCleanSet(connection, compliance, curator, pool, { leaves: s.leaves });
       const covered = set?.depositCount ?? 0;
       const excluded = set?.excluded ?? [];
       return {
@@ -97,9 +99,13 @@ export function solanaChain(cfg) {
 
     freshRecipient: () => Keypair.generate().publicKey.toBase58(),
 
-    async withdraw(note, recipient, p, step) {
+    async withdraw(note, recipient, p, step, retried = false) {
       const fee = BigInt(cfg.fee);
-      const { index } = await this.noteStatus(note, p);
+      // Read the chain again: the curator may have published since the page loaded.
+      p = await this.pool();
+      const status = await this.noteStatus(note, p);
+      const { index } = status;
+      if (!status.canWithdraw) throw new Error(`Deposit #${index} cannot be withdrawn now: ${status.label.toLowerCase()}.`);
       const set = p.cleanSet;
       step("Rebuilt the pool from devnet history and checked the curator's memo", {
         detail: [
@@ -127,12 +133,20 @@ export function solanaChain(cfg) {
       });
       step("The relay sends one transaction: VerifyClearance, then SubmitClearedSpend");
       const s = S.toSolana(proof);
-      const out = await post("/api/solana/relay", {
-        proof: { a: hex(s.a), b: hex(s.b), c: hex(s.c) },
-        inputs: [input.poolRoot, input.cleanRoot, input.nullifierHash, input.binding],
-        beneficiary: recipient,
-        fee: fee.toString(),
-      });
+      let out;
+      try {
+        out = await post("/api/solana/relay", {
+          proof: { a: hex(s.a), b: hex(s.b), c: hex(s.c) },
+          inputs: [input.poolRoot, input.cleanRoot, input.nullifierHash, input.binding],
+          beneficiary: recipient,
+          fee: fee.toString(),
+        });
+      } catch (e) {
+        // The curator revoked this clean root while the proof was being made. Prove again, once.
+        if (retried || !/StaleCleanRoot/.test(e.message)) throw e;
+        step("The curator published a new clean set while proving, so this root is stale. Proving again", { done: true });
+        return this.withdraw(note, recipient, p, step, true);
+      }
       const received = unit(BigInt(cfg.denomination) - fee);
       step("The compliance program verified the proof and wrote a public clearance. The pool accepted the spend", {
         tx: out.tx,
@@ -140,7 +154,9 @@ export function solanaChain(cfg) {
         detail: "The clearance and the spend share one slot, so a clearance can never outlive a curator's revocation.",
         done: true,
       });
-      if (out.settled) {
+      if (out.settleError) {
+        step(`The spend is recorded, but settling the batch failed: ${out.settleError}. Retry with "Settle the batch"`, { done: true });
+      } else if (out.settled) {
         step(`The batch settled: ${out.settled.settled} withdrawals paid at once, ${received} of them to ${short(recipient)}`, {
           tx: out.settled.tx,
           accounts: [["beneficiary", recipient]],

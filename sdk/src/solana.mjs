@@ -3,7 +3,7 @@
 
 import { keccak256, concatBytes, hexToBytes, bytesToHex, sha256 } from "viem";
 import { PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
-import { MerkleTree } from "./tree.mjs";
+import { MerkleTree, cleanTree } from "./tree.mjs";
 
 export const ACTION_DOMAIN = new TextEncoder().encode("mirror-pool:action:v2");
 /** The BN254 base field modulus: negating a G1 point maps y to Q - y. */
@@ -282,38 +282,82 @@ export function parseCuratorAccount(d) {
 
 /**
  * A memo body as the clean set it describes, or null if it does not describe
- * `pool` under this curator state: wrong version, a root the curator does not
- * hold now, or a policy document whose hash is not the curator's.
+ * `pool` under this curator state: malformed, wrong version, a root the
+ * curator does not hold now, or a policy document whose hash is not the
+ * curator's. Never throws, since anyone can put any text in a memo.
  */
 export function acceptMemo(text, pool, state) {
-  let body;
   try {
-    body = JSON.parse(text);
+    const body = JSON.parse(text);
+    if (body?.v !== 2 || body.pool !== pool.toBase58()) return null;
+    const { n, x, r, policy } = body;
+    if (!Number.isSafeInteger(n) || n < 0) return null;
+    if (!Array.isArray(x) || !x.every((i, j) => Number.isSafeInteger(i) && i >= 0 && i < n && (j === 0 || i > x[j - 1]))) return null;
+    if (typeof r !== "string" || !/^[0-9a-f]{1,64}$/.test(r)) return null;
+    if (policy?.version !== 1 || policy.rule !== POLICY_RULE || !Array.isArray(policy.blocklist)) return null;
+    if (!policy.blocklist.every((a) => typeof a === "string")) return null;
+    const cleanRoot = BigInt(`0x${r}`);
+    if (!state.roots.includes(cleanRoot)) return null;
+    if (bytesToHex(policyHash(policy)) !== state.policyHash) return null;
+    return { depositCount: n, excluded: x, policy, blocklist: policy.blocklist, cleanRoot };
   } catch {
     return null;
   }
-  if (body?.v !== 2 || body.pool !== pool.toBase58() || !body.policy) return null;
-  const cleanRoot = BigInt(`0x${body.r}`);
-  if (!state.roots.includes(cleanRoot)) return null;
-  if (bytesToHex(policyHash(body.policy)) !== state.policyHash) return null;
-  return { depositCount: body.n, excluded: body.x, policy: body.policy, blocklist: body.policy.blocklist, cleanRoot };
 }
 
-/** The latest clean set the curator published for `pool` and still stands behind. */
-export async function readCleanSet(connection, compliance, authority, pool) {
+/** True if `authority` signed this transaction. Signers come first among the static keys. */
+function signedBy(tx, authority) {
+  const msg = tx.transaction.message;
+  const keys = msg.staticAccountKeys ?? msg.accountKeys;
+  return keys.slice(0, msg.header.numRequiredSignatures).some((k) => k.equals(authority));
+}
+
+/**
+ * The latest clean set the curator published for `pool` and still stands
+ * behind, or null if none is found among the curator account's most recent
+ * `maxScan` transactions. Every withdrawal also touches that account, and
+ * anyone can reference it, so this pages back through its history and reads
+ * only memos in transactions the curator signed. With `leaves`, a memo must
+ * also rebuild to its own root.
+ */
+export async function readCleanSet(connection, compliance, authority, pool, { leaves, maxScan = 2000 } = {}) {
   const state = await curatorState(connection, compliance, authority);
   if (!state) return null;
-  const sigs = await withBackoff(() => connection.getSignaturesForAddress(curatorAddress(compliance, authority), { limit: 20 }, "confirmed"));
-  for (const { signature, err } of sigs) {
-    if (err) continue;
-    const tx = await fetchTx(connection, signature);
-    const msg = tx.transaction.message;
-    const keys = msg.staticAccountKeys ?? msg.accountKeys;
-    for (const ci of msg.compiledInstructions ?? msg.instructions) {
-      if (!keys[ci.programIdIndex].equals(MEMO_PROGRAM)) continue;
-      const set = acceptMemo(new TextDecoder().decode(Uint8Array.from(ci.data)), pool, state);
-      if (set) return { ...set, signature, epoch: state.epoch };
+  const account = curatorAddress(compliance, authority);
+  let before;
+  for (let scanned = 0; scanned < maxScan; ) {
+    const sigs = await withBackoff(() => connection.getSignaturesForAddress(account, { limit: 100, before }, "confirmed"));
+    if (!sigs.length) return null;
+    for (const { signature, err } of sigs) {
+      if (err) continue;
+      const tx = await fetchTx(connection, signature);
+      if (!tx || !signedBy(tx, authority)) continue;
+      const msg = tx.transaction.message;
+      const keys = msg.staticAccountKeys ?? msg.accountKeys;
+      for (const ci of msg.compiledInstructions ?? msg.instructions) {
+        if (!keys[ci.programIdIndex]?.equals(MEMO_PROGRAM)) continue;
+        const set = acceptMemo(new TextDecoder().decode(Uint8Array.from(ci.data)), pool, state);
+        if (!set) continue;
+        if (leaves && (leaves.length < set.depositCount || (await cleanTree(leaves.slice(0, set.depositCount), set.excluded)).root() !== set.cleanRoot)) continue;
+        return { ...set, signature, epoch: state.epoch };
+      }
     }
+    scanned += sigs.length;
+    before = sigs.at(-1).signature;
   }
   return null;
+}
+
+/**
+ * The blocklist in force: the latest accepted memo's, or `genesis` while the
+ * curator has never published a root. A curator that has published but whose
+ * memo cannot be found fails closed: falling back to `genesis` would silently
+ * unblock everyone it blocked since.
+ */
+export async function blocklistInForce(connection, compliance, authority, pool, genesis) {
+  const set = await readCleanSet(connection, compliance, authority, pool);
+  if (set) return set.blocklist;
+  const state = await curatorState(connection, compliance, authority);
+  if (!state || (state.epoch === 0n && state.roots.length === 0)) return genesis;
+  throw new Error("the curator's latest clean set could not be found, so its blocklist is unknown");
 }
