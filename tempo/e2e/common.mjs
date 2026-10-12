@@ -13,6 +13,7 @@ import { createPublicClient, defineChain, http } from "viem";
 import { generatePrivateKey, privateKeyToAddress } from "viem/accounts";
 import { tempoLocalnet, tempoModerato } from "viem/chains";
 import { Account, createClient } from "viem/tempo";
+import { RETRY } from "compliance-sdk/tempo";
 
 export const ROOT = new URL("..", import.meta.url).pathname;
 export const NETWORK = process.env.NETWORK ?? "local";
@@ -51,9 +52,9 @@ export function demoKeys() {
 }
 
 export const address = (pk) => privateKeyToAddress(pk);
-export const publicClient = createPublicClient({ chain, transport: http() });
+export const publicClient = createPublicClient({ chain, transport: http(undefined, RETRY) });
 export const wallet = (pk) =>
-  createClient({ account: Account.fromSecp256k1(pk), chain, transport: http(), feeToken: PATH_USD });
+  createClient({ account: Account.fromSecp256k1(pk), chain, transport: http(undefined, RETRY), feeToken: PATH_USD });
 
 export function abi(name, file = name) {
   return JSON.parse(readFileSync(`${ROOT}out/${file}.sol/${name}.json`, "utf8")).abi;

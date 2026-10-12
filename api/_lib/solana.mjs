@@ -8,7 +8,16 @@ import { cleanTree } from "compliance-sdk/tree";
 import { SOLANA, secret } from "./common.mjs";
 
 const connection = new Connection(SOLANA.rpc, "confirmed");
-const keypair = (name) => Keypair.fromSecretKey(Uint8Array.from(JSON.parse(secret(name))));
+// A parse error would quote part of the key, and errors reach the client.
+function keypair(name) {
+  try {
+    return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(secret(name))));
+  } catch (e) {
+    if (/missing/.test(e.message)) throw e;
+    // eslint-disable-next-line preserve-caught-error -- the cause would quote the key
+    throw new Error(`the demo service's ${name} is malformed`);
+  }
+}
 const relay = () => keypair("SOLANA_RELAY_KEY");
 const curator = () => keypair("SOLANA_CURATOR_KEY");
 export const relayAddress = () => relay().publicKey.toBase58();
@@ -27,7 +36,7 @@ const MAX_BATCH = 10;
 const COMPLIANCE_ERRORS = ["UnknownInstruction", "MalformedInstruction", "NonCanonicalInput", "ProofVerificationFailed", "MissingSignature", "InvalidAccount", "CuratorExists", "WrongAuthority", "UnknownPoolRoot", "StaleCleanRoot", "ClearanceExists", "ArithmeticOverflow"];
 const POOL_ERRORS = { 100: "ClearanceRequired", 101: "InvalidClearance", 102: "ClearanceForAnotherPool", 103: "ClearanceForAnotherNullifier", 104: "WrongCurator", 105: "StaleClearance", 106: "BindingMismatch", 107: "PoolNotServed" };
 // mirror-pool's own codes, which the compliant pool returns unchanged.
-const MIRROR_ERRORS = { 1: "MalformedInstruction", 2: "InvalidPda", 3: "MissingSignature", 4: "InvalidOwner", 5: "InvalidPoolAccount", 6: "AlreadyInitialised", 7: "InvalidParameter", 8: "NonCanonicalField", 9: "PoseidonFailed", 10: "TreeFull", 12: "ArithmeticOverflow", 13: "InsolventVault", 14: "InvalidSpendAccount", 15: "NullifierAlreadySpent", 16: "AlreadySettled", 17: "UnknownRoot", 18: "ProofVerificationFailed", 19: "BelowAnonymityFloor", 20: "RelayFeeTooLarge", 21: "CrowdTooSmall", 22: "UnknownSelector", 23: "SelfInvocationRefused", 24: "PayloadTooLarge", 25: "FeeNotUniform" };
+const MIRROR_ERRORS = { 1: "MalformedInstruction", 2: "InvalidPda", 3: "MissingSignature", 4: "InvalidOwner", 5: "InvalidPoolAccount", 6: "AlreadyInitialised", 7: "InvalidParameter", 8: "NonCanonicalField", 9: "PoseidonFailed", 10: "TreeFull", 12: "ArithmeticOverflow", 13: "InsolventVault", 14: "InvalidSpendAccount", 15: "NullifierAlreadySpent", 16: "AlreadySettled", 17: "UnknownRoot", 18: "ProofVerificationFailed", 19: "BelowAnonymityFloor", 20: "RelayFeeTooLarge", 21: "CrowdTooSmall", 22: "UnknownSelector", 23: "SelfInvocationRefused", 24: "PayloadTooLarge", 25: "FeeNotUniform", 26: "BelowFloorNotPermitted" };
 
 /**
  * The program error behind a failed transaction, by name, so the client can
@@ -109,8 +118,13 @@ async function settleable(known = []) {
       !banned.has(new PublicKey(d.subarray(32, 64)).toBase58())
     );
   });
-  ok.sort((a, b) => Number(first.has(b.pubkey.toBase58())) - Number(first.has(a.pubkey.toBase58())));
-  return ok.slice(0, MAX_BATCH);
+  // The runtime refuses to change an executable account's balance, so a
+  // beneficiary a program was deployed to after its spend was recorded can
+  // never be paid. Leaving those out keeps them from stalling every batch.
+  const beneficiaries = await S.withBackoff(() => connection.getMultipleAccountsInfo(ok.map((a) => new PublicKey(a.account.data.subarray(32, 64))), "confirmed"));
+  const payable = ok.filter((_, i) => !beneficiaries[i]?.executable);
+  payable.sort((a, b) => Number(first.has(b.pubkey.toBase58())) - Number(first.has(a.pubkey.toBase58())));
+  return payable.slice(0, MAX_BATCH);
 }
 
 function settleInstruction(spends, allowBelowFloor) {
@@ -143,7 +157,8 @@ async function simulates(spends, allowBelowFloor) {
  */
 async function settle(allowBelowFloor = false, known = []) {
   let pending = await settleable(known);
-  if (!pending.length) return null;
+  // Another settle may have paid some since the caller counted.
+  if (!pending.length || (!allowBelowFloor && pending.length < K_FLOOR)) return null;
   const failure = await simulates(pending, allowBelowFloor);
   if (failure) {
     const p = programError({ logs: failure.logs, message: JSON.stringify(failure.err) });
@@ -157,7 +172,15 @@ async function settle(allowBelowFloor = false, known = []) {
     if (!found) throw new Error(`the batch does not settle: ${p ? `${p.by}: ${p.name}` : JSON.stringify(failure.err)}`);
     pending = found;
   }
-  return { tx: await send([settleInstruction(pending, allowBelowFloor)], [relay()]), settled: pending.length, included: pending.map((a) => a.pubkey.toBase58()) };
+  let tx;
+  try {
+    tx = await send([settleInstruction(pending, allowBelowFloor)], [relay()]);
+  } catch (e) {
+    // Another settle paid one of these between the simulation and this send.
+    if (programError(e)?.code === 16) return null;
+    throw e;
+  }
+  return { tx, settled: pending.length, included: pending.map((a) => a.pubkey.toBase58()) };
 }
 
 /**
@@ -171,6 +194,15 @@ async function publish(blocklist, { revoke = false, base } = {}) {
   const excluded = depositors.map((d, i) => (blocked.has(d) ? i : -1)).filter((i) => i >= 0);
   const cleanRoot = (await cleanTree(leaves, excluded)).root();
   const c = curator();
+  // The same clean set, already held in the current epoch under the same
+  // policy: publishing it again would only push older roots out of the
+  // curator's ring, staling proofs made against them.
+  if (!revoke) {
+    const state = await S.curatorState(connection, compliance, c.publicKey);
+    if (state && state.roots.includes(cleanRoot) && state.policyHash === S.bytesToHex(S.policyHash(policy))) {
+      return { tx: null, depositCount: leaves.length, excluded, revoked: false, unchanged: true };
+    }
+  }
   const ixs = S.publishInstructions({ compliance, curator: c.publicKey, pool, depositCount: leaves.length, excluded, blocklist: policy.blocklist, cleanRoot, revoke });
   // Another publication may have landed since `base` was read: publishing over
   // it would silently undo its block or unblock.
@@ -276,7 +308,11 @@ export const solanaActions = {
     try {
       const pending = (await settleable([spend])).length;
       const settled = pending >= K_FLOOR ? await settle(false, [spend]) : null;
-      return { tx, pending: settled ? 0 : pending, settled, paid: Boolean(settled?.included.includes(spend.toBase58())) };
+      if (settled) return { tx, pending: 0, settled, paid: settled.included.includes(spend.toBase58()) };
+      // Another settle may have paid this spend meanwhile.
+      const record = await connection.getAccountInfo(spend, "confirmed");
+      if (record?.data[1] === 2) return { tx, pending: 0, settled: null, paid: true };
+      return { tx, pending: (await settleable([spend])).length, settled: null, paid: false };
     } catch (e) {
       return { tx, pending: null, settled: null, settleError: e.message };
     }
@@ -305,7 +341,17 @@ export const solanaActions = {
   async block({ address }) {
     if (!isPubkey(address)) throw new Error("not a public key");
     if (protectedKeys().includes(address)) throw new Error("the demo's own accounts cannot be blocked");
-    return curatorChange((list) => [...list.add(address)], { revoke: true });
+    // The memo holds only so many addresses, and the console lists depositors:
+    // an address with no deposit here would take a place no one could see to free.
+    const { depositors } = await S.syncPool(connection, program, pool);
+    if (!depositors.includes(address)) throw new Error("this address has no deposit in the pool");
+    return curatorChange(
+      (list) => {
+        if (list.has(address)) throw new Error("this address is blocked already");
+        return [...list.add(address)];
+      },
+      { revoke: true },
+    );
   },
 
   async unblock({ address }) {

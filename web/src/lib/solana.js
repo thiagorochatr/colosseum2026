@@ -189,8 +189,8 @@ export function solanaChain(cfg) {
     async publish(step) {
       step("Asking the curator to apply its policy to every deposit so far");
       const r = await post("/api/solana/publish", {});
-      step(`Curator published the clean root for ${r.depositCount} deposits`, {
-        tx: r.tx,
+      step(r.unchanged ? `The curator's latest clean root already covers all ${r.depositCount} deposits under this policy` : `Curator published the clean root for ${r.depositCount} deposits`, {
+        tx: r.tx ?? undefined,
         accounts: curatorAccount,
         detail: [["excluded by the policy", indices(r.excluded)]],
         done: true,
@@ -201,7 +201,7 @@ export function solanaChain(cfg) {
     async block(address, step) {
       step(`The curator blocks ${short(address)}: Revoke, UpdatePolicy, PublishRoot and a memo, in one transaction`);
       const r = await post("/api/solana/block", { address });
-      step(`New epoch: every older clean root is revoked. Excluded ${indices(r.excluded)}`, {
+      step(`New epoch: every older clean root is revoked. The clean set now excludes ${indices(r.excluded)}`, {
         tx: r.tx,
         accounts: curatorAccount,
         detail: [["clean set", `${r.depositCount} deposits, excluded ${indices(r.excluded)}`]],
@@ -213,7 +213,7 @@ export function solanaChain(cfg) {
     async unblock(address, step) {
       step(`The curator publishes a policy without ${short(address)} and a new clean root`);
       const r = await post("/api/solana/unblock", { address });
-      step(`Published: excluded ${indices(r.excluded)}`, { tx: r.tx, accounts: curatorAccount, done: true });
+      step(r.unchanged ? "This address was not blocked, so nothing changed" : `Published: the clean set now excludes ${indices(r.excluded)}`, { tx: r.tx ?? undefined, accounts: curatorAccount, done: true });
       return r;
     },
   };

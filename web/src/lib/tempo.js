@@ -12,10 +12,10 @@ import { burner, createNote } from "./store.js";
 import { post, PROVING, short, field, indices } from "./api.js";
 
 export function tempoChain(cfg) {
-  const publicClient = createPublicClient({ chain: tempoModerato, transport: http(cfg.rpc) });
+  const publicClient = createPublicClient({ chain: tempoModerato, transport: http(cfg.rpc, T.RETRY) });
   const key = burner("tempo", generatePrivateKey);
   const me = privateKeyToAddress(key);
-  const wallet = createClient({ account: Account.fromSecp256k1(key), chain: tempoModerato, transport: http(cfg.rpc), feeToken: "0x20C0000000000000000000000000000000000000" });
+  const wallet = createClient({ account: Account.fromSecp256k1(key), chain: tempoModerato, transport: http(cfg.rpc, T.RETRY), feeToken: "0x20C0000000000000000000000000000000000000" });
   const read = (functionName, args = []) => publicClient.readContract({ address: cfg.pool, abi: T.POOL_ABI, functionName, args });
   const unit = (v) => `${(Number(v) / 1e6).toLocaleString()} dUSD`;
 
@@ -178,19 +178,27 @@ export function tempoChain(cfg) {
     async block(address, step) {
       step(`The issuer adds ${short(address)} to the TIP-403 blacklist and excludes its deposits: the block and the first three excludes in one batch transaction`);
       const r = await post("/api/tempo/block", { address });
-      step(`Excluded ${indices(r.excluded)} from the clean set`, {
+      step(r.excluded.length ? `Blocked, and excluded ${indices(r.excluded)} from the clean set` : "Blocked. This address has no clean deposit to exclude", {
         tx: r.tx,
-        detail: "The clean epoch moved forward, so the pool now rejects every older clean root.",
+        detail: r.excluded.length ? "The clean epoch moved forward, so the pool now rejects every older clean root." : undefined,
         done: true,
       });
+      afterSweep(r, step);
       return r;
     },
 
     async unblock(address, step) {
       step(`The issuer removes ${short(address)} from the blacklist and calls reinclude`);
       const r = await post("/api/tempo/unblock", { address });
-      step(`Reincluded ${indices(r.reincluded)} in the clean set`, { tx: r.tx, done: true });
+      step(r.reincluded.length ? `Unblocked, and reincluded ${indices(r.reincluded)} in the clean set` : "Unblocked. This address had no excluded deposit", { tx: r.tx, done: true });
+      afterSweep(r, step);
       return r;
     },
   };
+}
+
+/** The keeper's sweep that follows a block or an unblock, which has landed either way. */
+function afterSweep(r, step) {
+  if (r.sweepError) step(`The keeper's sweep that follows failed: ${r.sweepError}. Run the keeper to finish`, { done: true });
+  else for (const tx of r.swept?.txs ?? []) step("The keeper's sweep applied the token's policy to the rest of the clean set", { tx, done: true });
 }

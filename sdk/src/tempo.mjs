@@ -25,6 +25,13 @@ const EXCLUDED = parseAbiItem(
 );
 const REINCLUDED = parseAbiItem("event Reincluded(uint256 indexed index, uint256 cleanRoot)");
 
+/**
+ * For viem's http transport. Public Tempo RPCs rate-limit bursts with
+ * "Request exceeds defined limit", which viem retries with a doubling delay;
+ * the default three tries are not enough for a sync plus a sweep.
+ */
+export const RETRY = { retryCount: 8, retryDelay: 200 };
+
 /** getLogs over [from, latest] in chunks, since public RPCs cap the block range. */
 async function logsSince(publicClient, address, event, fromBlock, latest, chunk = 100_000n) {
   const out = [];
@@ -151,9 +158,9 @@ export async function readSweep(publicClient, { pool, token, fromBlock, synced }
   synced ??= await syncPool(publicClient, { pool, fromBlock });
   const policy = await publicClient.readContract({ address: token, abi: TIP20_ABI, functionName: "transferPolicyId" });
   const unique = [...new Set(synced.depositors.map((d) => d.toLowerCase()))];
-  const answers = await Promise.all(
-    unique.map((a) => publicClient.readContract({ address: REGISTRY, abi: REGISTRY_ABI, functionName: "isAuthorizedSender", args: [policy, a] })),
-  );
+  // One read at a time: a burst of them trips public RPCs' rate limits.
+  const answers = [];
+  for (const a of unique) answers.push(await publicClient.readContract({ address: REGISTRY, abi: REGISTRY_ABI, functionName: "isAuthorizedSender", args: [policy, a] }));
   const ok = new Map(unique.map((a, i) => [a, answers[i]]));
   const authorized = (a) => ok.get(a.toLowerCase());
   return { ...planSweep(synced, authorized), policy, synced, authorized };

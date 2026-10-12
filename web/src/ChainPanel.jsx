@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { addNote, loadNotes, downloadNote, importNote, markSaved } from "./lib/store.js";
 import { short } from "./lib/api.js";
 
@@ -91,16 +91,21 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
   }
 
   // `quiet` keeps a failed refresh from replacing the error of the action that just ran.
+  // A slow refresh that finishes after a newer one is dropped, so it cannot put back an older state.
+  const latest = useRef(0);
   const refresh = useCallback(async ({ quiet = false } = {}) => {
+    const mine = ++latest.current;
     try {
       const [b, p] = await Promise.all([chain.balance(), chain.pool()]);
+      const n = loadNotes(chain.id);
+      const s = await Promise.all(n.map((note) => chain.noteStatus(note, p)));
+      if (mine !== latest.current) return;
       setBalance(b);
       setPool(p);
-      const n = loadNotes(chain.id);
       setNotes(n);
-      setStatuses(await Promise.all(n.map((note) => chain.noteStatus(note, p))));
+      setStatuses(s);
     } catch (e) {
-      if (!quiet) setError(e.message);
+      if (!quiet && mine === latest.current) setError(e.message);
     }
   }, [chain]);
 
@@ -121,6 +126,7 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
     } finally {
       // A failed action can still have changed the chain, as when the keeper
       // excludes a deposit before its withdrawal is refused.
+      setBusy("Reading the chain again");
       await refresh({ quiet: true });
       setBusy(null);
     }
@@ -164,7 +170,12 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
   async function importFile(e) {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (file) importKey(await file.text());
+    if (!file) return;
+    try {
+      importKey(await file.text());
+    } catch (err) {
+      setImportError(`Could not read ${file.name}: ${err.message}`);
+    }
   }
 
   const startWithdraw = (i) => {

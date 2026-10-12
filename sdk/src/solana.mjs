@@ -239,8 +239,23 @@ export function executedInstructions(tx) {
 /**
  * The pool's leaves and depositors in deposit order, rebuilt from its history.
  * The count must match the pool's and the rebuilt root must be its current root.
+ * A deposit landing during the read, or an RPC node whose signature index lags
+ * its account state, makes the two disagree for a moment: read again, a few times.
  */
-export async function syncPool(connection, program, pool) {
+export async function syncPool(connection, program, pool, attempts = 4) {
+  for (let i = 1; ; i++) {
+    try {
+      return await syncPoolOnce(connection, program, pool);
+    } catch (e) {
+      if (!(e instanceof OutOfStep) || i >= attempts) throw e;
+      await sleep(1500);
+    }
+  }
+}
+
+class OutOfStep extends Error {}
+
+async function syncPoolOnce(connection, program, pool) {
   const sigs = [];
   let before;
   for (;;) {
@@ -265,10 +280,10 @@ export async function syncPool(connection, program, pool) {
   }
   const state = await poolState(connection, pool);
   if (BigInt(deposits.length) !== state.depositCount) {
-    throw new Error(`history has ${deposits.length} deposits, the pool counts ${state.depositCount}`);
+    throw new OutOfStep(`history has ${deposits.length} deposits, the pool counts ${state.depositCount}`);
   }
   const tree = await MerkleTree.from(deposits.map((x) => x.commitment));
-  if (tree.root() !== state.currentRoot) throw new Error("the rebuilt pool root is not the pool's current root");
+  if (tree.root() !== state.currentRoot) throw new OutOfStep("the rebuilt pool root is not the pool's current root");
   return { leaves: deposits.map((x) => x.commitment), depositors: deposits.map((x) => x.depositor), deposits, root: state.currentRoot };
 }
 
@@ -356,24 +371,26 @@ function signedBy(tx, authority) {
 
 /**
  * The latest clean set the curator published for `pool` and still stands
- * behind, or null if none is found among the curator account's most recent
- * `maxScan` transactions of the curator's authority. Anyone can reference
- * that key, so this pages back through its history and reads only memos in
- * transactions the authority signed. With `leaves`, a memo must also rebuild
- * to its own root.
+ * behind, or null if none is found among the most recent `maxScan`
+ * transactions with a memo that reference the curator's authority. Anyone can
+ * reference that key, so this pages back through its history and reads only
+ * memos in transactions the authority signed. With `leaves`, a memo must also
+ * rebuild to its own root.
  */
-export async function readCleanSet(connection, compliance, authority, pool, { leaves, maxScan = 2000 } = {}) {
+export async function readCleanSet(connection, compliance, authority, pool, { leaves, maxScan = 2000, maxPages = 500 } = {}) {
   const state = await curatorState(connection, compliance, authority);
   if (!state) return null;
   // The authority's own history: withdrawals touch the curator account, not
   // the authority, so this is mostly publications. A transaction with no memo
-  // is skipped without fetching it.
+  // is skipped without fetching it, and does not count toward `maxScan`: a
+  // flood of plain transfers to the authority costs pages, not the search.
   let before;
-  for (let scanned = 0; scanned < maxScan; ) {
-    const sigs = await withBackoff(() => connection.getSignaturesForAddress(authority, { limit: 100, before }, "confirmed"));
+  for (let scanned = 0, pages = 0; scanned < maxScan && pages < maxPages; pages++) {
+    const sigs = await withBackoff(() => connection.getSignaturesForAddress(authority, { limit: pages ? 1000 : 100, before }, "confirmed"));
     if (!sigs.length) return null;
     for (const { signature, err, memo } of sigs) {
       if (err || !memo) continue;
+      if (++scanned > maxScan) return null;
       const tx = await fetchTx(connection, signature);
       if (!tx || !signedBy(tx, authority)) continue;
       const msg = tx.transaction.message;
@@ -386,7 +403,6 @@ export async function readCleanSet(connection, compliance, authority, pool, { le
         return { ...set, signature, epoch: state.epoch };
       }
     }
-    scanned += sigs.length;
     before = sigs.at(-1).signature;
   }
   return null;

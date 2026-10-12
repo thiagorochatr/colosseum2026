@@ -9,8 +9,8 @@ import * as T from "compliance-sdk/tempo";
 import { TEMPO, secret, isAddress } from "./common.mjs";
 
 const chain = TEMPO.rpc === tempoModerato.rpcUrls.default.http[0] ? tempoModerato : defineChain({ ...tempoModerato, rpcUrls: { default: { http: [TEMPO.rpc] } } });
-const publicClient = createPublicClient({ chain, transport: http(TEMPO.rpc) });
-const wallet = (key) => createClient({ account: Account.fromSecp256k1(key), chain, transport: http(TEMPO.rpc), feeToken: "0x20C0000000000000000000000000000000000000" });
+const publicClient = createPublicClient({ chain, transport: http(TEMPO.rpc, T.RETRY) });
+const wallet = (key) => createClient({ account: Account.fromSecp256k1(key), chain, transport: http(TEMPO.rpc, T.RETRY), feeToken: "0x20C0000000000000000000000000000000000000" });
 const issuer = () => wallet(secret("TEMPO_ISSUER_KEY"));
 const relayerKey = () => secret("TEMPO_RELAYER_KEY");
 export const relayerAddress = () => Account.fromSecp256k1(relayerKey()).address;
@@ -38,20 +38,38 @@ async function sweep() {
 }
 
 /**
- * A sweep that tolerates one race: if another keeper excluded the same deposit
- * first, the batch reverts with AlreadyExcluded, so it plans again from the
- * new state. A second failure refuses the withdrawal rather than relaying it
- * without applying the policy.
+ * A sweep that tolerates one failure: if another keeper excluded the same
+ * deposit first, the batch reverts with AlreadyExcluded, so it plans again
+ * from the new state.
  */
-async function sweepBeforeRelay() {
+async function sweepRetrying() {
   try {
     return await sweep();
   } catch {
-    try {
-      return await sweep();
-    } catch (e) {
-      throw new Error(`could not apply the issuer's policy before relaying, so the withdrawal was not sent: ${e.shortMessage ?? e.message}`, { cause: e });
-    }
+    // A pause first: the RPC endpoint may also have refused a burst of reads.
+    await new Promise((r) => setTimeout(r, 2000));
+    return await sweep();
+  }
+}
+
+/** A second failure refuses the withdrawal rather than relaying it without applying the policy. */
+async function sweepBeforeRelay() {
+  try {
+    return await sweepRetrying();
+  } catch (e) {
+    throw new Error(`could not apply the issuer's policy before relaying, so the withdrawal was not sent: ${e.shortMessage ?? e.message}`, { cause: e });
+  }
+}
+
+/**
+ * The sweep after a block or an unblock, which has landed already: a failure
+ * is reported beside that transaction instead of hiding it.
+ */
+async function sweepAfter() {
+  try {
+    return { swept: await sweepRetrying() };
+  } catch (e) {
+    return { sweepError: e.shortMessage ?? e.message };
   }
 }
 
@@ -149,13 +167,8 @@ export const tempoActions = {
       indices = await clean();
       tx = await blockWith(indices.slice(0, 3));
     }
-    const rest = indices.slice(3);
-    if (rest.length) {
-      // The address is blocked now, so the keeper's sweep finishes the job and re-plans if raced.
-      const swept = await sweepBeforeRelay();
-      tx = swept.tx ?? tx;
-    }
-    return { tx, excluded: indices };
+    // The address is blocked now, so the keeper's sweep finishes the job and re-plans if raced.
+    return { tx, excluded: indices, ...(indices.length > 3 ? await sweepAfter() : {}) };
   },
 
 
@@ -177,7 +190,6 @@ export const tempoActions = {
     } catch {
       tx = await sendCalls(issuer(), [unblock]);
     }
-    const swept = await sweepBeforeRelay();
-    return { tx: swept.tx ?? tx, reincluded: indices };
+    return { tx, reincluded: indices, ...(await sweepAfter()) };
   },
 };
