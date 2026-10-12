@@ -71,19 +71,37 @@ export function tempoChain(cfg) {
       return { index, label: "Clean", tone: "good", canWithdraw: true };
     },
 
-    /** `keep` stores the key before anything is sent, so a lost confirmation cannot lose it. */
+    /**
+     * `keep` stores the key before anything is sent, so a lost confirmation
+     * cannot lose it, and returns how to drop it again if the deposit
+     * certainly did not happen.
+     */
     async deposit(step, keep) {
       const have = await publicClient.readContract({ address: cfg.token, abi: T.TIP20_ABI, functionName: "balanceOf", args: [me] });
       if (have < BigInt(cfg.denomination)) throw new Error(`This wallet holds ${unit(have)}. Get test funds first.`);
+      const policy = await publicClient.readContract({ address: cfg.token, abi: T.TIP20_ABI, functionName: "transferPolicyId" });
+      const allowed = await publicClient.readContract({ address: T.REGISTRY, abi: T.REGISTRY_ABI, functionName: "isAuthorizedSender", args: [policy, me] });
+      if (!allowed) throw new Error(`The issuer's TIP-403 policy blocks this wallet, so the token refuses its transfers. Unblock ${short(me)} in the Issuer console, then deposit.`);
       const note = createNote(scope);
-      keep(note);
+      const drop = keep(note);
       step("Created a withdrawal key in this browser", { detail: "Two random field elements, k and r. They stay in this browser unless you download the key.", done: true });
       const commitment = await commitmentOf(note);
       step("Computed the commitment", { detail: [["C = Poseidon(k, r, denomination)", field(commitment)]], done: true });
       step("Sending one Tempo batch transaction: approve the pool, then deposit");
       const calls = T.depositCalls({ pool: cfg.pool, token: cfg.token, denomination: cfg.denomination, commitment });
-      const r = await wallet.sendTransactionSync({ calls });
-      if (r.status !== "success") throw new Error("the deposit reverted");
+      let r;
+      try {
+        r = await wallet.sendTransactionSync({ calls });
+      } catch (e) {
+        // A revert means nothing moved, so the key is worthless. Any other
+        // failure may still have landed, so the key stays.
+        if (/revert/i.test(e.shortMessage ?? e.message)) drop();
+        throw e;
+      }
+      if (r.status !== "success") {
+        drop();
+        throw new Error("The deposit reverted, so nothing was deposited.");
+      }
       step(`The pool took ${unit(cfg.denomination)} and appended C to the pool tree and the clean tree`, {
         tx: r.transactionHash,
         detail: "The token's TIP-403 policy checked that this wallet is an authorized sender.",

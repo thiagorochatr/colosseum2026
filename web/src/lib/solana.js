@@ -77,20 +77,35 @@ export function solanaChain(cfg) {
       return { index, label: "Clean", tone: "good", canWithdraw: true };
     },
 
-    /** `keep` stores the key before anything is sent, so a lost confirmation cannot lose it. */
+    /**
+     * `keep` stores the key before anything is sent, so a lost confirmation
+     * cannot lose it, and returns how to drop it again if the deposit
+     * certainly did not happen.
+     */
     async deposit(step, keep) {
       // The deposit plus fees and the spend record's rent.
       const have = await connection.getBalance(kp.publicKey);
       if (have < Number(cfg.denomination) + 10_000_000) throw new Error(`This wallet holds ${unit(have)}. Get test funds first.`);
       const note = createNote(scope);
-      keep(note);
+      const drop = keep(note);
       step("Created a withdrawal key in this browser", { detail: "Two random field elements, k and r. They stay in this browser unless you download the key.", done: true });
       const commitment = await commitmentOf(note);
       step("Computed the commitment", { detail: [["C = Poseidon(k, r, denomination)", field(commitment)]], done: true });
       step("Sending Deposit to the compliant pool, which runs mirror-pool's own deposit");
       const tx = new Transaction().add(S.instructions.deposit(program, kp.publicKey, pool, commitment));
-      const sig = await connection.sendTransaction(tx, [kp]);
-      await connection.confirmTransaction(sig, "confirmed");
+      let sig;
+      try {
+        sig = await connection.sendTransaction(tx, [kp]);
+      } catch (e) {
+        // Refused before it was sent: nothing can land.
+        drop();
+        throw e;
+      }
+      const { value } = await connection.confirmTransaction(sig, "confirmed");
+      if (value.err) {
+        drop();
+        throw new Error(`The deposit failed on chain, so nothing was deposited: ${JSON.stringify(value.err)}`);
+      }
       step(`The pool escrowed ${unit(cfg.denomination)} and appended C to its tree`, { tx: sig, done: true });
       step("The curator applies its policy and publishes a clean root that covers the new deposit");
       const r = await post("/api/solana/publish", {});

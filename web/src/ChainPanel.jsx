@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { addNote, loadNotes, downloadNote, importNote, markSaved } from "./lib/store.js";
+import { addNote, removeNote, loadNotes, downloadNote, importNote, markSaved } from "./lib/store.js";
 import { short } from "./lib/api.js";
 
 function Chip({ tone, children }) {
@@ -15,6 +15,13 @@ function Link({ href, children, className }) {
 }
 
 const now = () => new Date().toLocaleTimeString();
+
+/** An error as one readable sentence: viem's short message, without its request dump. */
+function plain(e) {
+  const text = e.shortMessage ?? e.message ?? String(e);
+  if (/PolicyForbids/.test(text)) return "The token's TIP-403 policy refused the transfer: the issuer blocks one of its addresses.";
+  return text;
+}
 const settle = (steps, state) => steps.map((x) => (x.state === "running" ? { ...x, state } : x));
 // The page reads the chain again on its own this often, while it is visible and idle.
 const POLL = 30_000;
@@ -150,8 +157,9 @@ export default function ChainPanel({ chain, copy, log, updateLog, onStatus }) {
       await fn(entry.step);
       entry.finish();
     } catch (e) {
-      entry.fail(e.message);
-      setError(e.message);
+      const message = plain(e);
+      entry.fail(message);
+      setError(message);
     } finally {
       // A failed action can still have changed the chain, as when the keeper
       // excludes a deposit before its withdrawal is refused.
@@ -165,7 +173,10 @@ export default function ChainPanel({ chain, copy, log, updateLog, onStatus }) {
 
   const deposit = () =>
     run(`Deposit ${chain.denominationLabel}`, async (step) => {
-      await chain.deposit(step, (note) => addNote(chain.id, note));
+      await chain.deposit(step, (note) => {
+        addNote(chain.id, note);
+        return () => removeNote(chain.id, note);
+      });
       step("Download the withdrawal key in step 3. It is the only way to withdraw this deposit, from this browser or any other", { done: true });
     });
 
@@ -328,6 +339,12 @@ export default function ChainPanel({ chain, copy, log, updateLog, onStatus }) {
                     )}
                     {st?.label === "Blocked, not yet excluded" && (
                       <p className="hint bad">The issuer blocked this depositor. A withdrawal applies the policy first, so it will be refused.</p>
+                    )}
+                    {st?.label === "Not deposited" && (
+                      <div className="row">
+                        <span className="hint">No deposit with this key is on chain. If its deposit failed, remove it.</span>
+                        <button className="link" onClick={() => { removeNote(chain.id, note); setNotes(loadNotes(chain.id)); refresh(); }} disabled={!!busy}>Remove</button>
+                      </div>
                     )}
                     {st?.label === "Excluded" && <p className="hint bad">The depositor was blocked, so this deposit is outside the clean set. No valid proof exists for it.</p>}
                   </li>

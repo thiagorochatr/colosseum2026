@@ -89,6 +89,7 @@ h1, h2, p { margin: 0; }
 .card h2 { font-size: 0.92rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .notice { margin: 12px 20px 0; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; overflow-wrap: anywhere; }
 .col .notice { margin: 0; }
+.notice button { flex: none; white-space: nowrap; }
 .notice.error { border-color: var(--bad); color: var(--bad); background: var(--bad-bg); }
 
 /* Left: the story and the three steps. */

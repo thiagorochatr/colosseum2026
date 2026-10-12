@@ -77,6 +77,11 @@ export function addNote(chain, note) {
   writeRaw(chain, [...rawNotes(chain), serializeNote(note)]);
 }
 
+/** Drops a key whose deposit certainly never happened: its transaction reverted or was never sent. */
+export function removeNote(chain, note) {
+  writeRaw(chain, rawNotes(chain).filter((t) => tryParse(t)?.k !== note.k));
+}
+
 /**
  * Offers the key as a file. Whether it was saved, the page cannot tell: the
  * user may cancel the dialog or the browser may block it, so the key is marked
