@@ -32,10 +32,36 @@ async function sendCalls(client, calls) {
  */
 async function sweep() {
   const plan = await T.readSweep(publicClient, { pool: TEMPO.pool, token: TEMPO.token, fromBlock: TEMPO.deployBlock });
-  const calls = T.sweepCalls({ pool: TEMPO.pool, ...plan });
-  const tx = calls.length ? await sendCalls(wallet(relayerKey()), calls) : null;
-  return { tx, excluded: plan.exclude, reincluded: plan.reinclude };
+  const txs = [];
+  for (const calls of T.sweepBatches({ pool: TEMPO.pool, ...plan })) txs.push(await sendCalls(wallet(relayerKey()), calls));
+  return { tx: txs.at(-1) ?? null, txs, excluded: plan.exclude, reincluded: plan.reinclude };
 }
+
+/**
+ * A sweep that tolerates one race: if another keeper excluded the same deposit
+ * first, the batch reverts with AlreadyExcluded, so it plans again from the
+ * new state. A second failure refuses the withdrawal rather than relaying it
+ * without applying the policy.
+ */
+async function sweepBeforeRelay() {
+  try {
+    return await sweep();
+  } catch {
+    try {
+      return await sweep();
+    } catch (e) {
+      throw new Error(`could not apply the issuer's policy before relaying, so the withdrawal was not sent: ${e.shortMessage ?? e.message}`, { cause: e });
+    }
+  }
+}
+
+/** The token's policy in force, read on every call: the issuer can switch it. */
+const policyId = () => publicClient.readContract({ address: TEMPO.token, abi: T.TIP20_ABI, functionName: "transferPolicyId" });
+
+/** The demo's own accounts, which no visitor may block: doing so would stop the pool for everyone. */
+const isProtected = (a) => [TEMPO.pool, TEMPO.issuer, relayerAddress()].some((p) => p.toLowerCase() === a.toLowerCase());
+
+const isUint = (x) => /^[0-9]{1,78}$/.test(String(x));
 
 export const tempoActions = {
   /** Gas stablecoins from Moderato's faucet, and Demo USD from the issuer. */
@@ -51,12 +77,17 @@ export const tempoActions = {
 
   /** Submits a withdrawal and pays the gas; the pool pays the fee bound into the proof. */
   async relay(req) {
+    // Validate everything before spending any gas.
+    if (!isUint(req.fee)) throw new Error("malformed fee");
     const fee = BigInt(req.fee);
     if (fee < BigInt(TEMPO.fee)) throw new Error(`fee below ${TEMPO.fee}`);
     if (!isAddress(req.recipient)) throw new Error("recipient is not an address");
+    const points = [req.a, ...(Array.isArray(req.b) ? req.b : [null]), req.c];
+    if (!Array.isArray(req.b) || req.b.length !== 2 || !points.every((p) => Array.isArray(p) && p.length === 2 && p.every(isUint))) throw new Error("malformed proof");
+    if (![req.poolRoot, req.cleanRoot, req.nullifierHash].every(isUint)) throw new Error("malformed public inputs");
     // Apply the issuer's current policy first: a depositor it blocks after the
     // proof was made is excluded before the withdrawal can land.
-    const swept = await sweep();
+    const swept = await sweepBeforeRelay();
     const account = Account.fromSecp256k1(relayerKey());
     const args = [
       req.a.map(BigInt), req.b.map((row) => row.map(BigInt)), req.c.map(BigInt),
@@ -84,19 +115,21 @@ export const tempoActions = {
    */
   async restrict({ address }) {
     if (!isAddress(address)) throw new Error("not an address");
+    if (isProtected(address)) throw new Error("the demo's own accounts cannot be blocked");
     const { encodeFunctionData } = await import("viem");
-    const data = encodeFunctionData({ abi: T.REGISTRY_ABI, functionName: "modifyPolicyBlacklist", args: [BigInt(TEMPO.policy), address, true] });
+    const data = encodeFunctionData({ abi: T.REGISTRY_ABI, functionName: "modifyPolicyBlacklist", args: [await policyId(), address, true] });
     return { tx: await sendCalls(issuer(), [{ to: T.REGISTRY, data }]) };
   },
 
   /** The issuer blocks an address and excludes its clean deposits, in one batch transaction. */
   async block({ address }) {
     if (!isAddress(address)) throw new Error("not an address");
+    if (isProtected(address)) throw new Error("the demo's own accounts cannot be blocked");
     const synced = await T.syncPool(publicClient, { pool: TEMPO.pool, fromBlock: TEMPO.deployBlock });
     const indices = synced.depositors
       .map((d, i) => (d.toLowerCase() === address.toLowerCase() && !synced.excluded.includes(i) ? i : -1))
       .filter((i) => i >= 0);
-    const tx = await sendCalls(issuer(), T.blockAndExcludeCalls({ pool: TEMPO.pool, policy: TEMPO.policy, account: address, indices }));
+    const tx = await sendCalls(issuer(), T.blockAndExcludeCalls({ pool: TEMPO.pool, policy: await policyId(), account: address, indices }));
     return { tx, excluded: indices };
   },
 
@@ -109,7 +142,7 @@ export const tempoActions = {
       .filter((i) => i >= 0);
     const { encodeFunctionData } = await import("viem");
     const calls = [
-      { to: T.REGISTRY, data: encodeFunctionData({ abi: T.REGISTRY_ABI, functionName: "modifyPolicyBlacklist", args: [BigInt(TEMPO.policy), address, false] }) },
+      { to: T.REGISTRY, data: encodeFunctionData({ abi: T.REGISTRY_ABI, functionName: "modifyPolicyBlacklist", args: [await policyId(), address, false] }) },
       ...indices.map((i) => ({ to: TEMPO.pool, data: encodeFunctionData({ abi: T.POOL_ABI, functionName: "reinclude", args: [BigInt(i)] }) })),
     ];
     return { tx: await sendCalls(issuer(), calls), reincluded: indices };

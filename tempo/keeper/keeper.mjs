@@ -28,12 +28,17 @@ const at = () => new Date().toISOString().slice(11, 19);
 /** One sweep: read the plan, and send it as one batch transaction if it has work. */
 export async function sweepOnce() {
   const plan = await T.readSweep(publicClient, { pool, token, fromBlock: deployBlock });
-  const calls = T.sweepCalls({ pool, ...plan });
-  if (!calls.length) return { plan, depositors: plan.synced.depositors };
-  const receipt = await wallet(key).sendTransactionSync({ calls });
-  if (receipt.status !== "success") throw new Error(`sweep reverted: ${receipt.transactionHash}`);
-  console.log(`${at()} excluded [${plan.exclude}] reincluded [${plan.reinclude}]: ${txLink(receipt.transactionHash)}`);
-  return { plan, depositors: plan.synced.depositors, tx: receipt.transactionHash };
+  const batches = T.sweepBatches({ pool, ...plan });
+  if (!batches.length) return { plan, depositors: plan.synced.depositors };
+  let tx;
+  for (const calls of batches) {
+    const receipt = await wallet(key).sendTransactionSync({ calls });
+    if (receipt.status !== "success") throw new Error(`sweep reverted: ${receipt.transactionHash}`);
+    tx = receipt.transactionHash;
+    console.log(`${at()} sent ${calls.length} of the sweep's calls: ${txLink(tx)}`);
+  }
+  console.log(`${at()} excluded [${plan.exclude}] reincluded [${plan.reinclude}]`);
+  return { plan, depositors: plan.synced.depositors, tx };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -58,17 +63,25 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(`${at()} watching the TIP-403 registry for ${depositors.size} depositors of ${pool}`);
   // Polls getLogs block by block: Moderato's RPC does not keep the event
   // filters viem's watchers rely on.
+  // One poll at a time, and at most 100k blocks per query, Moderato's cap, so
+  // that catching up after a long pause never wedges the loop.
   let last = await publicClient.getBlockNumber();
+  let polling = false;
   setInterval(async () => {
+    if (polling) return;
+    polling = true;
     try {
       const head = await publicClient.getBlockNumber();
       if (head <= last) return;
-      const logs = await publicClient.getLogs({ address: T.REGISTRY, events: POLICY_EVENTS, fromBlock: last + 1n, toBlock: head });
-      last = head;
+      const to = head - last > 100_000n ? last + 100_000n : head;
+      const logs = await publicClient.getLogs({ address: T.REGISTRY, events: POLICY_EVENTS, fromBlock: last + 1n, toBlock: to });
+      last = to;
       const hit = logs.find((l) => depositors.has(l.args.account?.toLowerCase()));
       if (hit) sweep(`${hit.eventName} for ${hit.args.account} in block ${hit.blockNumber}`);
     } catch (e) {
       console.error(`${at()} watch: ${e.shortMessage ?? e.message}`);
+    } finally {
+      polling = false;
     }
   }, 2_000);
   setInterval(() => sweep("tick"), EVERY);

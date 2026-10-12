@@ -25,13 +25,8 @@ const EXCLUDED = parseAbiItem(
 );
 const REINCLUDED = parseAbiItem("event Reincluded(uint256 indexed index, uint256 cleanRoot)");
 
-/**
- * Rebuilds the pool's leaves and its excluded set from events, in order.
- * Returns the last roots the events announced so a caller can check them.
- */
 /** getLogs over [from, latest] in chunks, since public RPCs cap the block range. */
-async function logsSince(publicClient, address, event, fromBlock, chunk = 100_000n) {
-  const latest = await publicClient.getBlockNumber();
+async function logsSince(publicClient, address, event, fromBlock, latest, chunk = 100_000n) {
   const out = [];
   for (let from = BigInt(fromBlock); from <= latest; from += chunk) {
     const to = from + chunk - 1n < latest ? from + chunk - 1n : latest;
@@ -40,11 +35,16 @@ async function logsSince(publicClient, address, event, fromBlock, chunk = 100_00
   return out;
 }
 
+/**
+ * Rebuilds the pool's leaves and its excluded set from events, in order. All
+ * three event kinds are read up to one block, so they describe one state.
+ */
 export async function syncPool(publicClient, { pool, fromBlock }) {
+  const latest = await publicClient.getBlockNumber();
   const [deposits, exclusions, reinclusions] = await Promise.all([
-    logsSince(publicClient, pool, DEPOSIT, fromBlock),
-    logsSince(publicClient, pool, EXCLUDED, fromBlock),
-    logsSince(publicClient, pool, REINCLUDED, fromBlock),
+    logsSince(publicClient, pool, DEPOSIT, fromBlock, latest),
+    logsSince(publicClient, pool, EXCLUDED, fromBlock, latest),
+    logsSince(publicClient, pool, REINCLUDED, fromBlock, latest),
   ]);
   const leaves = [];
   for (const log of deposits) {
@@ -159,10 +159,22 @@ export async function readSweep(publicClient, { pool, token, fromBlock, synced }
   return { ...planSweep(synced, authorized), policy, synced, authorized };
 }
 
-/** A sweep as one batch transaction: every exclude and reinclude it needs. */
+/** A sweep as calls: every exclude and reinclude it needs. */
 export function sweepCalls({ pool, exclude, reinclude }) {
   const call = (functionName, i) => ({ to: pool, data: encodeFunctionData({ abi: POOL_ABI, functionName, args: [BigInt(i)] }) });
   return [...exclude.map((i) => call("exclude", i)), ...reinclude.map((i) => call("reinclude", i))];
+}
+
+/**
+ * The same calls split into batch transactions of at most `size`. Each
+ * exclude rewrites a 20-node path, about 1.5M gas, so a policy change that
+ * blocks many depositors at once would not fit one transaction.
+ */
+export function sweepBatches(plan, size = 4) {
+  const calls = sweepCalls(plan);
+  const out = [];
+  for (let i = 0; i < calls.length; i += size) out.push(calls.slice(i, i + size));
+  return out;
 }
 
 /** Approve and deposit as ONE Tempo batch transaction: the user signs once. */
