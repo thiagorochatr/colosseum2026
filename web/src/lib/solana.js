@@ -171,7 +171,7 @@ export function solanaChain(cfg) {
       const received = unit(BigInt(cfg.denomination) - fee);
       step("The compliance program verified the proof and wrote a public clearance. The pool accepted the spend", {
         tx: out.tx,
-        accounts: [["clearance", S.clearanceAddress(compliance, pool, curator, S.fieldBytes(input.nullifierHash)).toBase58()]],
+        accounts: [["clearance", S.clearanceAddress(compliance, pool, curator, S.fieldBytes(input.nullifierHash)).toBase58()], ["relay", cfg.relay]],
         detail: "The clearance and the spend share one slot, so a clearance cannot be kept and used after a curator's revocation.",
         done: true,
       });

@@ -163,7 +163,7 @@ export function tempoChain(cfg) {
       }
       const received = unit(BigInt(cfg.denomination) - fee);
       step(`Accepted: ${received} paid to ${short(recipient)} and ${unit(fee)} to the relayer`, {
-        accounts: [["recipient", recipient]],
+        accounts: [["recipient", recipient], ["relayer", cfg.relayer]],
         tx: out.tx,
         detail: "The nullifier is now spent, so this withdrawal key can never be used again.",
         done: true,
