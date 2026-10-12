@@ -92,4 +92,4 @@ cd tempo && NETWORK=moderato node e2e/run.mjs
 cd solana/client && NETWORK=devnet node e2e.mjs
 ```
 
-The live app at [colosseum2026.vercel.app](https://colosseum2026.vercel.app) runs the same flows against the same deployments, and its log links every transaction it sends.
+The live app at [alibi.thiagorochatr.com](https://alibi.thiagorochatr.com) runs the same flows against the same deployments, and its log links every transaction it sends.
