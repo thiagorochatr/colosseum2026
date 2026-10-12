@@ -41,7 +41,15 @@ export function serve({ key, pool, minFee, port = 8787 }) {
     res.end(JSON.stringify(body, (_, v) => (typeof v === "bigint" ? v.toString() : v)));
   };
   const server = createServer(async (req, res) => {
-    if (req.method === "OPTIONS") return json(res, 204, {});
+    if (req.method === "OPTIONS") {
+      // A browser's POST with a JSON body is preflighted for its content-type.
+      res.writeHead(204, {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "GET, POST",
+        "access-control-allow-headers": "content-type",
+      });
+      return res.end();
+    }
     if (req.method === "GET" && req.url === "/info") return json(res, 200, { relayer, fee: minFee.toString(), pool });
     if (req.method === "POST" && req.url === "/relay") {
       let body = "";

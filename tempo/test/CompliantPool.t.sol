@@ -116,7 +116,11 @@ contract CompliantPoolTest is Test {
     }
 
     function withdraw(Proof memory p, address recipient, uint256 fee) internal {
-        pool.withdraw(p.a, p.b, p.c, p.poolRoot, p.cleanRoot, p.nullifierHash, recipient, relayer, fee);
+        withdraw(p, recipient, relayer, fee);
+    }
+
+    function withdraw(Proof memory p, address recipient, address by, uint256 fee) internal {
+        pool.withdraw(p.a, p.b, p.c, p.poolRoot, p.cleanRoot, p.nullifierHash, recipient, by, fee);
     }
 
     function blockAndExclude(uint256 u, uint256 index) internal {
@@ -179,6 +183,17 @@ contract CompliantPoolTest is Test {
         vm.expectRevert(CompliantPool.InvalidProof.selector);
         withdraw(p, users[3], 2e6);
         withdraw(p, users[3], 1e6);
+    }
+
+    function test_a_relayer_cannot_take_the_fee_bound_to_another_relayer() public {
+        depositAs(0, 0);
+        depositAs(1, 1);
+        Proof memory p = prove(0, 0, users[3], 1e6);
+        address other = makeAddr("other relayer");
+        vm.expectRevert(CompliantPool.InvalidProof.selector);
+        withdraw(p, users[3], other, 1e6);
+        withdraw(p, users[3], 1e6);
+        assertEq(token.balanceOf(relayer), 1e6);
     }
 
     function test_blocking_a_depositor_after_the_fact_removes_their_note() public {
@@ -276,7 +291,7 @@ contract CompliantPoolTest is Test {
         REGISTRY.modifyPolicyBlacklist(policy, users[0], true);
         uint256 c = commitment(0);
         vm.prank(users[0]);
-        vm.expectRevert();
+        vm.expectRevert(ITIP20.PolicyForbids.selector);
         pool.deposit(c);
         assertEq(pool.nextIndex(), 0, "the failed transfer reverted the insert");
     }

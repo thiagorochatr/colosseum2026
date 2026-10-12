@@ -124,7 +124,6 @@ test("a curator memo is accepted only with a held root and the curator's policy 
 });
 
 test("deposits made through another program or with lookup-table keys are still read", async () => {
-  const { default: bs58 } = await import("bs58");
   const [payer, router, program, pool, fromTable] = Array.from({ length: 5 }, () => PublicKey.unique());
   const deposit = Uint8Array.from([1, ...new Uint8Array(31), 9]);
   const tx = {
@@ -139,7 +138,7 @@ test("deposits made through another program or with lookup-table keys are still 
     meta: {
       // The pool and one more key come from a lookup table.
       loadedAddresses: { writable: [pool], readonly: [fromTable] },
-      innerInstructions: [{ index: 0, instructions: [{ programIdIndex: 2, accounts: [0, 3, 4], data: bs58.encode(deposit) }] }],
+      innerInstructions: [{ index: 0, instructions: [{ programIdIndex: 2, accounts: [0, 3, 4], data: base58(deposit) }] }],
     },
   };
   const ixs = solana.executedInstructions(tx);
@@ -163,3 +162,19 @@ test("the Solana instruction data have the programs' exact lengths", () => {
   assert.equal(solana.instructions.verifyClearance(C, me, me, pool, proof, [1n, 2n, 3n, 4n]).data.length, 1 + 256 + 128);
   assert.equal(solana.instructions.submitClearedSpend(P, C, me, me, pool, new Uint8Array(32), me, 5n).data.length, 1 + 115);
 });
+
+/** Base58, as RPC nodes encode inner instruction data. */
+function base58(bytes) {
+  const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let n = BigInt(`0x0${Buffer.from(bytes).toString("hex")}`);
+  let out = "";
+  while (n > 0n) {
+    out = A[Number(n % 58n)] + out;
+    n /= 58n;
+  }
+  for (const b of bytes) {
+    if (b !== 0) break;
+    out = `1${out}`;
+  }
+  return out;
+}

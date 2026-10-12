@@ -82,8 +82,12 @@ contract VerifierTest is Test {
     }
 
     function test_a_non_canonical_input_is_refused() public view {
-        Proof memory p = load(0);
-        p.inputs[3] = P;
-        assertFalse(check(p));
+        // x + P is the same scalar to ecMul, so the pairing alone would accept
+        // it: only the verifier's field check refuses it.
+        for (uint256 i = 0; i < 4; i++) {
+            Proof memory p = load(0);
+            p.inputs[i] += P;
+            assertFalse(check(p));
+        }
     }
 }

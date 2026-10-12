@@ -76,6 +76,33 @@ async function rejectedAt(input, check, label = "") {
   assert.equal(await witnessFailure(input), CHECK[check], `${label} should fail at the ${check} check`);
 }
 
+// Poseidon in JavaScript, for trees the vectors do not contain: circomlib's
+// reference permutation (poseidon_old.circom) with its constants. It equals the
+// circuit's optimized one, and each test using it checks that with a witness.
+const POSEIDON = readFileSync(join(here, "node_modules/circomlib/circuits/poseidon_constants_old.circom"), "utf8");
+const constants = {};
+function poseidonConstants(fn, t) {
+  const body = POSEIDON.slice(POSEIDON.indexOf(`function ${fn}(t)`));
+  const branch = body.slice(body.indexOf(`t == ${t})`));
+  // Drop the leading match, which is t itself.
+  return branch.slice(0, branch.indexOf("}")).match(/0x[0-9a-fA-F]+|\d+/g).slice(1).map(BigInt);
+}
+function poseidon(inputs) {
+  const t = inputs.length + 1;
+  const nF = 8;
+  const nP = [56, 57, 56, 60][t - 2];
+  constants[t] ??= { C: poseidonConstants("POSEIDON_C", t), M: poseidonConstants("POSEIDON_M", t) };
+  const { C, M } = constants[t];
+  const pow5 = (x) => (((x * x) % P) ** 2n % P) * x % P;
+  let s = [0n, ...inputs.map(BigInt)];
+  for (let i = 0; i < nF + nP; i++) {
+    s = s.map((x, j) => (x + C[t * i + j]) % P);
+    s = i < nF / 2 || i >= nF / 2 + nP ? s.map(pow5) : [pow5(s[0]), ...s.slice(1)];
+    s = s.map((_, row) => s.reduce((acc, x, j) => (acc + M[row * t + j] * x) % P, 0n));
+  }
+  return s[0];
+}
+
 const valid = vectors.valid.map(toInput);
 
 // snarkjs keeps the curve's worker threads alive, which stops Node from exiting
@@ -123,8 +150,23 @@ test("a wrong pool root or clean root is rejected", async () => {
 });
 
 test("the note must sit at the same index in both trees", async () => {
-  // Note at index 0 claiming index 2's path: both folds change, both fail.
-  await rejectedAt({ ...valid[0], pathIndices: valid[1].pathIndices }, "poolRoot");
+  // Note 0 keeps its true pool path, with a genuine clean path for the same
+  // leaf at index 1: a clean tree holding only that leaf, there.
+  const v = valid[0];
+  const j = 1;
+  const bits = v.pathIndices.map((_, d) => String((j >> d) & 1));
+  const cleanSiblings = [];
+  let node = poseidon([v.k, v.r, v.denomTag]);
+  let zero = 0n;
+  for (const bit of bits) {
+    cleanSiblings.push(zero.toString());
+    node = bit === "1" ? poseidon([zero, node]) : poseidon([node, zero]);
+    zero = poseidon([zero, zero]);
+  }
+  const moved = { cleanSiblings, cleanRoot: node.toString() };
+  // The clean path is valid at index 1: with the pool tree moved too, it proves.
+  assert.ok(await witnessOk({ ...v, ...moved, pathIndices: bits, poolSiblings: cleanSiblings, poolRoot: moved.cleanRoot }));
+  await rejectedAt({ ...v, ...moved }, "cleanRoot");
 });
 
 test("a path index that is not a bit is rejected", async () => {

@@ -4,14 +4,16 @@
 //   compliance note new  --chain tempo|solana --network <net> --out note.json
 //   compliance deposit   --note note.json  [--key 0x… | TEMPO_PRIVATE_KEY]  [--keypair id.json]
 //   compliance status    --note note.json
-//   compliance withdraw  --note note.json --to <address> [--relayer http://…] [--max-fee n]      (Tempo)
-//   compliance withdraw  --note note.json --to <pubkey> --relay-keypair relay.json [--fee n]   (Solana)
+//   compliance withdraw  --note note.json --to <address> [--relayer http://…] [--fee n] [--max-fee n]   (Tempo)
+//   compliance withdraw  --note note.json --to <pubkey> --relay-keypair relay.json [--keypair id.json] [--fee n] [--max-fee n]   (Solana)
 //   compliance settle    --network <net> [--keypair id.json] [--fee n] [--allow-below-floor] (Solana: spends at --fee)
 //
 // Networks: tempo local|moderato, solana local|devnet. Addresses come from the
 // repository's deployments/ files. Proving uses circuits/build/withdraw_js/withdraw.wasm
 // and circuits/ceremony/withdraw_final.zkey, or WITHDRAW_WASM / WITHDRAW_ZKEY, both
-// published in the ceremony-v1 release.
+// published in the ceremony-v1 release. A Tempo --relayer speaks the protocol of
+// tempo/relayer/relayer.mjs: GET /info, then POST /relay. --fee overrides the fee
+// it quotes, and --max-fee caps either, by default at 5% of the deposit.
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -48,7 +50,7 @@ async function tempoCtx(network) {
   const { tempoLocalnet, tempoModerato } = await import("viem/chains");
   const chain = network === "moderato" ? tempoModerato : defineChain({ ...tempoLocalnet, id: 31337, rpcUrls: { default: { http: [net.rpc] } } });
   const dep = json(`${ROOT}tempo/deployments/${net.chainId}.json`);
-  const publicClient = createPublicClient({ chain, transport: http(net.rpc) });
+  const publicClient = createPublicClient({ chain, transport: http(net.rpc, T.RETRY) });
   const read = (functionName, args = []) => publicClient.readContract({ address: dep.pool, abi: T.POOL_ABI, functionName, args });
   return { net, chain, dep, publicClient, read };
 }
@@ -57,7 +59,7 @@ async function tempoWallet(chain, key) {
   if (!key) throw new Error("pass --key or set TEMPO_PRIVATE_KEY");
   const { Account, createClient } = await import("viem/tempo");
   const { http } = await import("viem");
-  return createClient({ account: Account.fromSecp256k1(key), chain, transport: http(), feeToken: "0x20C0000000000000000000000000000000000000" });
+  return createClient({ account: Account.fromSecp256k1(key), chain, transport: http(undefined, T.RETRY), feeToken: "0x20C0000000000000000000000000000000000000" });
 }
 
 async function tempoFind(ctx, note) {
@@ -91,6 +93,8 @@ const tempo = {
     const ctx = await tempoCtx(note.network);
     const relayerUrl = opts.relayer ?? "http://127.0.0.1:8787";
     const info = await (await fetch(`${relayerUrl}/info`)).json();
+    // A relayer for another pool would only waste the proof: the binding names this pool.
+    if (String(info.pool).toLowerCase() !== ctx.dep.pool.toLowerCase()) throw new Error(`the relayer serves pool ${info.pool}, not this note's ${ctx.dep.pool}`);
     const fee = BigInt(opts.fee ?? info.fee);
     // The relayer names its own fee, and the pool only caps it at the whole deposit.
     const maxFee = opts["max-fee"] !== undefined ? BigInt(opts["max-fee"]) : BigInt(note.denomination) / 20n;

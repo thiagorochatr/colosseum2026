@@ -14,6 +14,7 @@ import { parseAbi } from "viem";
 import * as T from "compliance-sdk/tempo";
 import { demoKeys, publicClient, readState, txLink, wallet } from "../e2e/common.mjs";
 
+const DEPOSIT = parseAbi(["event Deposit(uint256 indexed index, uint256 commitment, address indexed depositor, uint256 poolRoot, uint256 cleanRoot)"]);
 const POLICY_EVENTS = parseAbi([
   "event BlacklistUpdated(uint64 indexed policyId, address indexed updater, address indexed account, bool restricted)",
   "event WhitelistUpdated(uint64 indexed policyId, address indexed updater, address indexed account, bool allowed)",
@@ -45,17 +46,23 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   let depositors = new Set();
   let running = Promise.resolve();
   let failed = false;
-  // Sweeps run one at a time; a sweep that fails, say on a race with another
-  // keeper, is logged and retried on the next event or tick.
+  // Sweeps run one at a time. A sweep that fails, say because another keeper
+  // excluded one of its deposits first and the batch reverted, plans again
+  // from the new state once, at once; a second failure waits for the next
+  // event or tick.
   const sweep = (why) =>
     (running = running.then(async () => {
-      try {
-        const r = await sweepOnce();
-        depositors = new Set(r.depositors.map((d) => d.toLowerCase()));
-        if (!r.tx && why !== "tick") console.log(`${at()} ${why}: the clean set already matches the policy`);
-      } catch (e) {
-        failed = true;
-        console.error(`${at()} sweep failed (${why}): ${e.shortMessage ?? e.message}`);
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const r = await sweepOnce();
+          for (const d of r.depositors) depositors.add(d.toLowerCase());
+          if (!r.tx && why !== "tick") console.log(`${at()} ${why}: the clean set already matches the policy`);
+          return;
+        } catch (e) {
+          console.error(`${at()} sweep failed (${why}, attempt ${attempt}): ${e.shortMessage ?? e.message}`);
+          if (attempt === 2) failed = true;
+          else await new Promise((r) => setTimeout(r, 2_000));
+        }
       }
     }));
 
@@ -64,8 +71,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (process.argv.includes("--once")) process.exit(failed ? 1 : 0);
 
   console.log(`${at()} watching the TIP-403 registry for ${depositors.size} depositors of ${pool}`);
-  // Polls getLogs block by block: Moderato's RPC does not keep the event
-  // filters viem's watchers rely on.
+  // Polls getLogs over each new range of blocks: Moderato's RPC does not keep
+  // the event filters viem's watchers rely on. New deposits are read in the
+  // same poll, so a block of a new depositor is not missed while no sweep has
+  // succeeded since its deposit.
   // One poll at a time, and at most 100k blocks per query, Moderato's cap, so
   // that catching up after a long pause never wedges the loop.
   let last = await publicClient.getBlockNumber();
@@ -77,7 +86,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       const head = await publicClient.getBlockNumber();
       if (head <= last) return;
       const to = head - last > 100_000n ? last + 100_000n : head;
-      const logs = await publicClient.getLogs({ address: T.REGISTRY, events: POLICY_EVENTS, fromBlock: last + 1n, toBlock: to });
+      const range = { fromBlock: last + 1n, toBlock: to };
+      const [deposits, logs] = await Promise.all([
+        publicClient.getLogs({ address: pool, events: DEPOSIT, ...range }),
+        publicClient.getLogs({ address: T.REGISTRY, events: POLICY_EVENTS, ...range }),
+      ]);
+      for (const d of deposits) depositors.add(d.args.depositor.toLowerCase());
       last = to;
       const hit = logs.find((l) => depositors.has(l.args.account?.toLowerCase()));
       if (hit) sweep(`${hit.eventName} for ${hit.args.account} in block ${hit.blockNumber}`);
