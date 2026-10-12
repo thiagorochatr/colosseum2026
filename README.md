@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/thiagorochatr/colosseum2026/actions/workflows/ci.yml/badge.svg)](https://github.com/thiagorochatr/colosseum2026/actions/workflows/ci.yml) [![On-chain](https://github.com/thiagorochatr/colosseum2026/actions/workflows/onchain.yml/badge.svg)](https://github.com/thiagorochatr/colosseum2026/actions/workflows/onchain.yml)
 
-A compliance layer for private payments, built for the Colosseum World's Fair hackathon.
+Alibi is a compliance layer for private payments, built for the Colosseum World's Fair hackathon.
 
 > Tempo has compliance without privacy. Solana has privacy without compliance.
 > One zero-knowledge proof closes both gaps.
