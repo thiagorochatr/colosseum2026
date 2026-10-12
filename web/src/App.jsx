@@ -48,7 +48,9 @@ function TopBar({ copy, status }) {
   return (
     <header className="top">
       <div className="brand">
-        <span className="brand-name">Private payments that keep the issuer's rules</span>
+        <img className="brand-mark" src="/favicon.svg" alt="" width="24" height="24" />
+        <span className="brand-name">Alibi</span>
+        <span className="brand-tag">Private payments that keep the issuer's rules</span>
         <span className="brand-chain">{copy.tab}</span>
       </div>
       <div className="status" aria-live="polite">

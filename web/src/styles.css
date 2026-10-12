@@ -53,8 +53,10 @@ h1, h2, p { margin: 0; }
 /* The bar across the top. */
 .app { min-height: 100vh; display: flex; flex-direction: column; }
 .top { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; background: var(--bg); }
-.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand-mark { flex: none; border-radius: 6px; }
 .brand-name { font-family: var(--serif); font-size: 1.3rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brand-tag { color: var(--muted); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .brand-chain { font-size: 0.8rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--raise); border: 1px solid var(--line); }
 .status { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.82rem; min-width: 0; }
 .status-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; }
@@ -81,6 +83,7 @@ h1, h2, p { margin: 0; }
 @media (max-width: 760px) {
   .board { grid-template-columns: 1fr; padding: 12px 16px 16px; }
   .brand-name { font-size: 1.05rem; }
+  .brand-tag { display: none; }
   .status-text { max-width: 40vw; }
   .source { display: none; }
 }

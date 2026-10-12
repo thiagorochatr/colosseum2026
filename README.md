@@ -1,4 +1,6 @@
-# Hackathon Colosseum World's Fair 2026
+<img src="brand/alibi.svg" width="72" alt="Alibi">
+
+# Alibi
 
 [![CI](https://github.com/thiagorochatr/colosseum2026/actions/workflows/ci.yml/badge.svg)](https://github.com/thiagorochatr/colosseum2026/actions/workflows/ci.yml) [![On-chain](https://github.com/thiagorochatr/colosseum2026/actions/workflows/onchain.yml/badge.svg)](https://github.com/thiagorochatr/colosseum2026/actions/workflows/onchain.yml)
 
@@ -108,6 +110,7 @@ Next:
 | `web/` | The app, one page per chain: [/tempo](https://colosseum2026.vercel.app/tempo) and [/solana](https://colosseum2026.vercel.app/solana). |
 | `api/` | The demo service as Vercel functions: faucet, relayer, issuer and curator, holding the test-network keys. |
 | `tempo/` | The private stablecoin pool, its tests, the relayer and the end-to-end flow. Live on Moderato. |
+| `brand/` | The Alibi mark, and PNGs of it for profiles and link previews. |
 | `.github/workflows/` | CI on every push, and a daily check that both networks run this source. See [SECURITY.md](SECURITY.md). |
 
 ## Prior work
