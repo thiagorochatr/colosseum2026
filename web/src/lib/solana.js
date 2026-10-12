@@ -20,6 +20,7 @@ export function solanaChain(cfg) {
   const compliance = new PublicKey(cfg.complianceProgram);
   const curator = new PublicKey(cfg.curatorAuthority);
   const pool = new PublicKey(cfg.pool);
+  const curatorAccount = [["curator account", S.curatorAddress(compliance, curator).toBase58()]];
   const unit = (lamports) => `${(Number(lamports) / 1e9).toLocaleString(undefined, { maximumFractionDigits: 4 })} SOL`;
   const cluster = "?cluster=devnet";
 
@@ -87,6 +88,7 @@ export function solanaChain(cfg) {
       const r = await post("/api/solana/publish", {});
       step(`Curator published the clean root for ${r.depositCount} deposits`, {
         tx: r.tx,
+        accounts: curatorAccount,
         detail: [["excluded by the policy", indices(r.excluded)], ["one transaction", "UpdatePolicy, PublishRoot, and a memo with the clean set and the policy"]],
         done: true,
       });
@@ -134,11 +136,16 @@ export function solanaChain(cfg) {
       const received = unit(BigInt(cfg.denomination) - fee);
       step("The compliance program verified the proof and wrote a public clearance. The pool accepted the spend", {
         tx: out.tx,
+        accounts: [["clearance", S.clearanceAddress(compliance, pool, S.fieldBytes(input.nullifierHash)).toBase58()]],
         detail: "The clearance and the spend share one slot, so a clearance can never outlive a curator's revocation.",
         done: true,
       });
       if (out.settled) {
-        step(`The batch settled: ${out.settled.settled} withdrawals paid at once, ${received} of them to ${short(recipient)}`, { tx: out.settled.tx, done: true });
+        step(`The batch settled: ${out.settled.settled} withdrawals paid at once, ${received} of them to ${short(recipient)}`, {
+          tx: out.settled.tx,
+          accounts: [["beneficiary", recipient]],
+          done: true,
+        });
       } else {
         step(`Waiting for the batch: ${out.pending} spend pending. The pool pays crowds of at least two, all at one timestamp`, { done: true });
       }
@@ -158,6 +165,7 @@ export function solanaChain(cfg) {
       const r = await post("/api/solana/block", { address });
       step(`New epoch: every older clean root is revoked. Excluded ${indices(r.excluded)}`, {
         tx: r.tx,
+        accounts: curatorAccount,
         detail: [["clean set", `${r.depositCount} deposits, excluded ${indices(r.excluded)}`]],
         done: true,
       });
@@ -167,7 +175,7 @@ export function solanaChain(cfg) {
     async unblock(address, step) {
       step(`The curator publishes a policy without ${short(address)} and a new clean root`);
       const r = await post("/api/solana/unblock", { address });
-      step(`Published: excluded ${indices(r.excluded)}`, { tx: r.tx, done: true });
+      step(`Published: excluded ${indices(r.excluded)}`, { tx: r.tx, accounts: curatorAccount, done: true });
       return r;
     },
   };

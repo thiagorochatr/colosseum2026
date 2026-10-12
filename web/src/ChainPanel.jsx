@@ -31,7 +31,15 @@ function LogEntry({ entry, chain }) {
           <li key={i} className={`step ${x.state}`}>
             <span className="mark" aria-hidden="true">{x.state === "running" ? <span className="spinner small" /> : x.state === "failed" ? "✕" : "✓"}</span>
             <div>
-              <span>{x.text}</span> {x.tx && <Link href={chain.txLink(x.tx)}>transaction</Link>}
+              <span>{x.text}</span>
+              {(x.tx || x.accounts) && (
+                <p className="links">
+                  {x.tx && <Link href={chain.txLink(x.tx)}>Transaction {short(x.tx, 6)} ↗</Link>}
+                  {(x.accounts ?? []).map(([label, a]) => (
+                    <Link key={a} href={chain.addressLink(a)}>{label} {short(a)} ↗</Link>
+                  ))}
+                </p>
+              )}
               {typeof x.detail === "string" && <p className="hint">{x.detail}</p>}
               {Array.isArray(x.detail) && (
                 <dl className="kv">
@@ -71,9 +79,9 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
     const edit = (fn) => updateLog(chain.id, (l) => l.map((e) => (e.id === id ? fn(e) : e)));
     updateLog(chain.id, (l) => [{ id, title, at: now(), state: "running", steps: [] }, ...l].slice(0, 20));
     return {
-      step(text, { detail, tx, done = false } = {}) {
+      step(text, { detail, tx, accounts, done = false } = {}) {
         if (!done) setBusy(text);
-        edit((e) => ({ ...e, steps: [...settle(e.steps, "done"), { text, detail, tx, state: done ? "done" : "running" }] }));
+        edit((e) => ({ ...e, steps: [...settle(e.steps, "done"), { text, detail, tx, accounts, state: done ? "done" : "running" }] }));
       },
       finish: () => edit((e) => ({ ...e, state: "done", steps: settle(e.steps, "done") })),
       fail: (error) => edit((e) => ({ ...e, state: "failed", error, steps: settle(e.steps, "failed") })),

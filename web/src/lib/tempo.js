@@ -124,8 +124,16 @@ export function tempoChain(cfg) {
         step("The clean set changed while proving, so its root is stale. Proving again", { done: true });
         return this.withdraw(note, recipient, pool, step, true);
       }
+      if (out.swept?.tx) {
+        step("Before submitting, the relayer applied the policy too", {
+          tx: out.swept.tx,
+          detail: [["excluded", indices(out.swept.excluded)], ["reincluded", indices(out.swept.reincluded)]],
+          done: true,
+        });
+      }
       const received = unit(BigInt(cfg.denomination) - fee);
       step(`Accepted: ${received} paid to ${short(recipient)} and ${unit(fee)} to the relayer`, {
+        accounts: [["recipient", recipient]],
         tx: out.tx,
         detail: "The nullifier is now spent, so this withdrawal key can never be used again.",
         done: true,
