@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { addNote, loadNotes, downloadNote, importNote } from "./lib/store.js";
+import { addNote, loadNotes, downloadNote, importNote, markSaved } from "./lib/store.js";
 import { short } from "./lib/api.js";
 
 function Chip({ tone, children }) {
@@ -72,6 +72,8 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
   const [importing, setImporting] = useState(false);
   const [pasted, setPasted] = useState("");
   const [importError, setImportError] = useState(null);
+  // Keys offered as a file in this visit, awaiting the user's word that the file saved.
+  const [offered, setOffered] = useState(() => new Set());
 
   // Each action opens a log entry; the chain adapter narrates its steps into it.
   function begin(title) {
@@ -133,13 +135,17 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
     });
 
   const save = (note) => {
+    downloadNote(note);
+    setOffered((s) => new Set(s).add(String(note.k)));
+  };
+
+  const confirmSaved = (note) => {
     try {
-      downloadNote(note);
+      markSaved(note);
     } catch (e) {
       setError(e.message);
     }
     setNotes(loadNotes(chain.id));
-    refresh();
   };
 
   function importKey(text) {
@@ -229,8 +235,15 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
                       {st && <Chip tone={st.tone}>{st.label}</Chip>}
                       <button className={note.saved ? "link" : ""} onClick={() => save(note)}>Download key</button>
                     </div>
-                    {!note.saved && st && !["Withdrawn", "Not deposited"].includes(st.label) && (
-                      <p className="hint bad">Not backed up. This key exists only in this browser: if its data is cleared, the deposit cannot be withdrawn. Download it and keep the file safe.</p>
+                    {!note.saved && !["Withdrawn", "Not deposited"].includes(st?.label) && (
+                      offered.has(String(note.k)) ? (
+                        <div className="row">
+                          <p className="hint">Did the file save? Check your downloads before you confirm.</p>
+                          <button onClick={() => confirmSaved(note)}>Yes, I have the file</button>
+                        </div>
+                      ) : (
+                        <p className="hint bad">Not backed up. This key exists only in this browser: if its data is cleared, the deposit cannot be withdrawn. Download it and keep the file safe.</p>
+                      )
                     )}
                     {st?.canWithdraw && withdrawing !== i && (
                       <button onClick={() => startWithdraw(i)} disabled={!!busy}>Withdraw…</button>

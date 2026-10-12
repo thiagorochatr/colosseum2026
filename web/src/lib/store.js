@@ -77,26 +77,31 @@ export function addNote(chain, note) {
   writeRaw(chain, [...rawNotes(chain), serializeNote(note)]);
 }
 
-/** Saves the key to a file and marks it as downloaded. The mark stays out of the file. */
+/**
+ * Offers the key as a file. Whether it was saved, the page cannot tell: the
+ * user may cancel the dialog or the browser may block it, so the key is marked
+ * backed up only when the user confirms, with markSaved.
+ */
 export function downloadNote(note) {
-  // The file is saved first; only the "downloaded" mark below can fail.
   const { saved: _saved, ...key } = note;
   const blob = new Blob([serializeNote(key)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `withdrawal-key-${note.chain}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
+  document.body.append(a);
   a.click();
+  a.remove();
   // Revoking at once can cancel the download in some browsers.
   setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+}
+
+/** Records that the user has the key's file. The mark stays out of the file. */
+export function markSaved(note) {
   const list = rawNotes(note.chain).map((t) => {
     const n = tryParse(t);
     return n && n.k === note.k ? serializeNote({ ...n, saved: true }) : t;
   });
-  try {
-    writeRaw(note.chain, list);
-  } catch (e) {
-    throw new Error("The key file was saved, but this browser did not record it as downloaded.", { cause: e });
-  }
+  writeRaw(note.chain, list);
 }
 
 /**

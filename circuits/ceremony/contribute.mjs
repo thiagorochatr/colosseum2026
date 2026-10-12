@@ -19,7 +19,8 @@ if (entropy.length < 64) throw new Error("expected at least 64 characters of ent
 // Defence in depth: nothing snarkjs logs may contain the entropy.
 const safe = (write) => (...args) => {
   const line = args.join(" ");
-  if (line.includes(entropy)) throw new Error("refusing to print a line that contains the entropy");
+  // Once the entropy is cleared, "" is in every string: only a non-empty secret is checked.
+  if (entropy && line.includes(entropy)) throw new Error("refusing to print a line that contains the entropy");
   write(line);
 };
 const logger = {

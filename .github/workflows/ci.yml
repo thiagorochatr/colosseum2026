@@ -29,8 +29,9 @@ env:
 # a tag is a pointer its owner can move.
 jobs:
   # The circuit, from source to the published ceremony. Everything the other
-  # jobs prove with comes out of this job, and each file is checked against the
-  # hash recorded in docs/CEREMONY.md before anything uses it.
+  # jobs prove with comes out of this job, and each file is checked against a
+  # pinned hash (in docs/CEREMONY.md, or below for the witness generator)
+  # before anything uses it.
   circuit:
     name: Circuit and ceremony
     runs-on: ubuntu-24.04
@@ -106,7 +107,9 @@ jobs:
       # vectors from mirror-core, and both chains' verifiers from the final key.
       - name: Generated files match their sources
         run: |
-          (cd circuits && npm run -s vectors) && git diff --exit-code circuits/test/vectors.json
+          # Two lines, not `a && b`: under bash -e a failure on the left of && does not stop the step.
+          (cd circuits && npm run -s vectors)
+          git diff --exit-code circuits/test/vectors.json
           ./circuits/node_modules/.bin/snarkjs zkey export solidityverifier circuits/ceremony/withdraw_final.zkey tempo/src/Groth16Verifier.sol
           cargo run -q --manifest-path solana/Cargo.toml -p snarkjs-bridge -- vk circuits/ceremony/vk.json \
             "circuits/ceremony/vk.json (final key, see docs/CEREMONY.md)" > solana/programs/compliance/src/vk.rs

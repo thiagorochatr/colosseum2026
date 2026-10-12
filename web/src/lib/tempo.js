@@ -108,6 +108,7 @@ export function tempoChain(cfg) {
         detail: [["deposits", leaves.length], ["excluded by the policy", indices(excluded)], ["your deposit", `#${index}`]],
         done: true,
       });
+      if (index < 0) throw new Error("This withdrawal key's deposit is not in the pool, so there is nothing to withdraw.");
       if (excluded.includes(index)) {
         throw new Error(`Deposit #${index} is outside the clean set: the token's policy blocks its depositor. No valid proof exists for it.`);
       }

@@ -11,7 +11,7 @@ const COPY = {
     lead: "Tempo has compliance without privacy: every TIP-20 transfer is public, and the issuer's blocklist sits on chain.",
     how: "This pool hides which deposit a withdrawal spends. Its clean set is derived from the issuer's own TIP-403 policy, on chain, with no curator: if the issuer blocks a depositor, their deposit leaves the clean set and can no longer be withdrawn.",
     consoleTitle: "Issuer console",
-    consoleHow: "The token issuer's policy decides. Blocking a depositor adds them to the blacklist and excludes their deposits in the same Tempo transaction.",
+    consoleHow: "The token issuer's policy decides. Blocking a depositor adds them to the blacklist and excludes their deposits in the same Tempo batch transaction, up to three of them; any more follow at once.",
   },
   solana: {
     tab: "Solana",
