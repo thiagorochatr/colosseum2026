@@ -170,7 +170,7 @@ A native program, in the same style as `mirror-pool`.
      It does not check the account's owner. Section 8.2 explains why a fake pool account gains nothing.
   2. Checks that `cleanRoot` is in the curator's ring, tagged with the current epoch.
   3. Verifies the Groth16 proof with `groth16-solana` over the four public inputs.
-  4. Creates the clearance account. Because its address is keyed by pool and nullifier, it can exist only once.
+  4. Writes the clearance account, keyed by pool and nullifier. A clearance written in an earlier slot is overwritten: a spend must consume its clearance in the slot it was written, so one left over, by a spend that never followed or by someone who sent `VerifyClearance` alone with a proof they saw, would otherwise freeze the note. A second clearance in the same slot is refused. A spent note gains nothing from an overwrite, since its spend record already exists.
 
 A clearance is public evidence. Anyone, such as an offramp, a DEX or a transfer hook, can check that pool `P` spent nullifier `N`, bound to `binding`, under curator `C`'s clean root `R`.
 

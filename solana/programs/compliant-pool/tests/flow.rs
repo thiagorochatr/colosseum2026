@@ -494,6 +494,29 @@ fn a_clearance_from_an_earlier_slot_is_stale() {
 }
 
 #[test]
+fn a_clearance_written_alone_in_an_earlier_slot_does_not_freeze_the_note() {
+    // Someone who saw the proof sends VerifyClearance alone. In a later slot,
+    // the real relay sends both instructions together, and the spend lands.
+    let (mut env, notes) = scenario();
+    let relay = env.funded();
+    let squatter = env.funded();
+    let to = Pubkey::new_unique();
+    let req = env
+        .prove(&notes[0], 0, &[1], env.binding_for(&relay.pubkey(), &to))
+        .unwrap();
+    let curator = env.curator.pubkey();
+    let pool = env.pool;
+    let ix = env.verify_clearance_ix(&squatter.pubkey(), &curator, &pool, &req);
+    env.send(&[ix], &[&squatter]).unwrap();
+    let slot = env.svm.get_sysvar::<solana_program::clock::Clock>().slot;
+    env.svm.warp_to_slot(slot + 1);
+    env.svm.expire_blockhash();
+    let verify = env.verify_clearance_ix(&relay.pubkey(), &curator, &pool, &req);
+    let spend = env.cleared_spend_ix(&relay.pubkey(), &notes[0], &to, env.clearance_of(&notes[0]));
+    env.send(&[verify, spend], &[&relay]).unwrap();
+}
+
+#[test]
 fn a_clearance_for_another_beneficiary_does_not_match() {
     let (mut env, notes) = scenario();
     let relay = env.funded();

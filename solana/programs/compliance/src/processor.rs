@@ -5,8 +5,8 @@ use crate::{
     ComplianceError,
 };
 use compliance_interface::{
-    clearance, clearance_address, curator, curator_address, mirror_pool, tag, CLEARANCE_SEED,
-    CURATOR_ROOTS, CURATOR_SEED,
+    clearance, clearance_address, curator, curator_address, mirror_pool, tag, Clearance,
+    CLEARANCE_SEED, CURATOR_ROOTS, CURATOR_SEED,
 };
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
@@ -281,21 +281,37 @@ fn verify_clearance(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) 
     if *clearance_account.key != expected {
         return Err(ComplianceError::InvalidAccount.into());
     }
-    if !clearance_account.data_is_empty() {
-        return Err(ComplianceError::ClearanceExists.into());
+    // A clearance is good for the slot it was written in, since a spend must
+    // consume it in that same slot. One left over from an earlier slot, by a
+    // spend that never followed or by someone who sent VerifyClearance alone
+    // with a proof they saw, is overwritten: refusing it would freeze the note
+    // for good. A spent note gains nothing from this, as its spend record
+    // already exists and the pool refuses a second spend.
+    let slot = Clock::get()?.slot;
+    let replace = !clearance_account.data_is_empty();
+    if replace {
+        if clearance_account.owner != program_id {
+            return Err(ComplianceError::InvalidAccount.into());
+        }
+        let earlier = Clearance::read(&clearance_account.try_borrow_data()?)
+            .ok_or(ComplianceError::InvalidAccount)?;
+        if earlier.slot == slot {
+            return Err(ComplianceError::ClearanceExists.into());
+        }
     }
 
     verify(&req)?;
 
-    create_pda_account(
-        payer,
-        clearance_account,
-        system,
-        clearance::LEN,
-        program_id,
-        &[CLEARANCE_SEED, pool.key.as_ref(), &nullifier, &[bump]],
-    )?;
-    let slot = Clock::get()?.slot;
+    if !replace {
+        create_pda_account(
+            payer,
+            clearance_account,
+            system,
+            clearance::LEN,
+            program_id,
+            &[CLEARANCE_SEED, pool.key.as_ref(), &nullifier, &[bump]],
+        )?;
+    }
     let mut d = clearance_account.try_borrow_mut_data()?;
     use clearance::at;
     d[at::VERSION] = clearance::VERSION;

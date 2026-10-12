@@ -8,5 +8,12 @@
     "complianceProgram": "4xFzzjv8CrB4gcHYHmsXWQmtkxcVXQfnNsTuuEJSgQLfwz7pNLaVtgN7B7HbaAtAuZcBaUhHN8HBzHKC8BKub7dy",
     "poolProgram": "4QK69ip4mARZFRChxncfB8ZJox7mCiVp9PKt7uydLZGwDRnhpDM23pnyfUZUKW13nbXi5wmDeVJ4QsLfDUbSvpon"
   },
-  "pool": "4RwTZq6ucSEDWEQZ6RSfa1ruhqEayS4QsF6LVPA7yvGP"
+  "pool": "4RwTZq6ucSEDWEQZ6RSfa1ruhqEayS4QsF6LVPA7yvGP",
+  "upgrades": [
+    {
+      "program": "complianceProgram",
+      "signature": "kyWiatjdkNaRRNHAybMLsf5w1U24tgogcyBRHKK7YXB6XzGCjWa1tceZnvfzJ5RFFhhJfX2EYvFPdM6uQRtJ4PA",
+      "change": "VerifyClearance replaces a clearance written in an earlier slot instead of refusing it, so a clearance written alone from a seen proof cannot freeze the note"
+    }
+  ]
 }

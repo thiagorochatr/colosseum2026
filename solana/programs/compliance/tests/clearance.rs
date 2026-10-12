@@ -230,10 +230,25 @@ fn a_valid_proof_against_a_published_root_writes_a_clearance() {
 }
 
 #[test]
-fn a_clearance_cannot_be_written_twice() {
+fn a_clearance_cannot_be_written_twice_in_one_slot() {
     let (mut env, req) = ready();
     env.verify_clearance(&req).unwrap();
     assert!(env.verify_clearance(&req).unwrap_err().contains(&code(10)));
+}
+
+#[test]
+fn a_clearance_from_an_earlier_slot_is_replaced() {
+    // Whoever saw the proof could write the clearance alone, in an earlier
+    // slot than the spend. If that froze the account, the note could never
+    // be spent: the spend needs a clearance from its own slot.
+    let (mut env, req) = ready();
+    env.verify_clearance(&req).unwrap();
+    let slot = env.svm.get_sysvar::<solana_program::clock::Clock>().slot;
+    env.svm.warp_to_slot(slot + 1);
+    env.svm.expire_blockhash();
+    env.verify_clearance(&req).unwrap();
+    let c = Clearance::read(&env.svm.get_account(&env.clearance(&req)).unwrap().data).unwrap();
+    assert_eq!(c.slot, slot + 1);
 }
 
 #[test]
