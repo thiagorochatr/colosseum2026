@@ -68,6 +68,9 @@ function TopBar({ copy, status }) {
           </>
         )}
       </div>
+      <a className="source" href="https://x.com/alibi_zk" target="_blank" rel="noreferrer">
+        @alibi_zk ↗
+      </a>
       <a className="source" href="https://github.com/thiagorochatr/colosseum2026" target="_blank" rel="noreferrer">
         Source ↗
       </a>
