@@ -88,7 +88,8 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
     };
   }
 
-  const refresh = useCallback(async () => {
+  // `quiet` keeps a failed refresh from replacing the error of the action that just ran.
+  const refresh = useCallback(async ({ quiet = false } = {}) => {
     try {
       const [b, p] = await Promise.all([chain.balance(), chain.pool()]);
       setBalance(b);
@@ -97,7 +98,7 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
       setNotes(n);
       setStatuses(await Promise.all(n.map((note) => chain.noteStatus(note, p))));
     } catch (e) {
-      setError(e.message);
+      if (!quiet) setError(e.message);
     }
   }, [chain]);
 
@@ -118,7 +119,7 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
     } finally {
       // A failed action can still have changed the chain, as when the keeper
       // excludes a deposit before its withdrawal is refused.
-      await refresh();
+      await refresh({ quiet: true });
       setBusy(null);
     }
   }
@@ -172,6 +173,7 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
     });
 
   const settleBatch = () => run("Settle the batch", (step) => chain.settle(step));
+  const publishRoot = () => run("Curator publication", (step) => chain.publish(step));
 
   const block = (address, blocked) =>
     run(blocked ? `Unblock ${short(address)}` : `Block ${short(address)}`, (step) => (blocked ? chain.unblock(address, step) : chain.block(address, step)));
@@ -248,8 +250,14 @@ export default function ChainPanel({ chain, copy, log, updateLog }) {
                     )}
                     {st?.label === "Waiting for the batch" && chain.settle && (
                       <>
-                        <p className="hint">The pool pays withdrawals in batches of at least two, so a single withdrawal cannot be timed back to its deposit.</p>
+                        <p className="hint">The pool pays withdrawals in batches of at least two, so a single withdrawal cannot be timed back to its deposit. A lone one is paid once the pool's timeout has passed.</p>
                         <button onClick={settleBatch} disabled={!!busy}>Settle the batch</button>
+                      </>
+                    )}
+                    {st?.label === "Awaiting the curator" && chain.publish && (
+                      <>
+                        <p className="hint">The curator has not yet published a clean root that covers this deposit.</p>
+                        <button onClick={publishRoot} disabled={!!busy}>Ask the curator to publish</button>
                       </>
                     )}
                     {st?.label === "Blocked, not yet excluded" && (

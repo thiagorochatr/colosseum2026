@@ -63,6 +63,8 @@ const isProtected = (a) => [TEMPO.pool, TEMPO.issuer, relayerAddress()].some((p)
 
 const isUint = (x) => /^[0-9]{1,78}$/.test(String(x));
 
+const chunks = (list, size) => Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, (i + 1) * size));
+
 export const tempoActions = {
   /** Gas stablecoins from Moderato's faucet, and Demo USD from the issuer. */
   async faucet({ address }) {
@@ -129,7 +131,12 @@ export const tempoActions = {
     const indices = synced.depositors
       .map((d, i) => (d.toLowerCase() === address.toLowerCase() && !synced.excluded.includes(i) ? i : -1))
       .filter((i) => i >= 0);
-    const tx = await sendCalls(issuer(), T.blockAndExcludeCalls({ pool: TEMPO.pool, policy: await policyId(), account: address, indices }));
+    // The block and the first three excludes go in one batch, closing the race
+    // for them; any further excludes follow in batches of four, since each
+    // costs about 1.5M gas.
+    const [first, ...rest] = [indices.slice(0, 3), ...chunks(indices.slice(3), 4)];
+    let tx = await sendCalls(issuer(), T.blockAndExcludeCalls({ pool: TEMPO.pool, policy: await policyId(), account: address, indices: first }));
+    for (const part of rest) tx = await sendCalls(issuer(), T.sweepCalls({ pool: TEMPO.pool, exclude: part, reinclude: [] }));
     return { tx, excluded: indices };
   },
 
@@ -141,10 +148,10 @@ export const tempoActions = {
       .map((d, i) => (d.toLowerCase() === address.toLowerCase() && synced.excluded.includes(i) ? i : -1))
       .filter((i) => i >= 0);
     const { encodeFunctionData } = await import("viem");
-    const calls = [
-      { to: T.REGISTRY, data: encodeFunctionData({ abi: T.REGISTRY_ABI, functionName: "modifyPolicyBlacklist", args: [await policyId(), address, false] }) },
-      ...indices.map((i) => ({ to: TEMPO.pool, data: encodeFunctionData({ abi: T.POOL_ABI, functionName: "reinclude", args: [BigInt(i)] }) })),
-    ];
-    return { tx: await sendCalls(issuer(), calls), reincluded: indices };
+    const unblock = { to: T.REGISTRY, data: encodeFunctionData({ abi: T.REGISTRY_ABI, functionName: "modifyPolicyBlacklist", args: [await policyId(), address, false] }) };
+    const [first, ...rest] = [indices.slice(0, 3), ...chunks(indices.slice(3), 4)];
+    let tx = await sendCalls(issuer(), [unblock, ...T.sweepCalls({ pool: TEMPO.pool, exclude: [], reinclude: first })]);
+    for (const part of rest) tx = await sendCalls(issuer(), T.sweepCalls({ pool: TEMPO.pool, exclude: [], reinclude: part }));
+    return { tx, reincluded: indices };
   },
 };

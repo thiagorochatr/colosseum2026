@@ -56,6 +56,7 @@ body { margin: 0; background: var(--bg); }
 .card.error { border-color: var(--bad); color: var(--bad); background: var(--bad-bg); margin-top: 12px; }
 .card.busy { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .muted { color: var(--muted); }
+.card.busy, .card.error { position: sticky; top: 8px; z-index: 5; }
 .hint { color: var(--muted); font-size: 0.85rem; margin: 8px 0 0; }
 .hint.bad { color: var(--bad); }
 .big { font-size: 1.5rem; font-weight: 700; margin: 4px 0 12px; }

@@ -24,8 +24,8 @@ function artifact(name) {
   const links = Object.values(deployedBytecode.linkReferences ?? {}).flatMap((file) =>
     Object.entries(file).flatMap(([library, refs]) => refs.map((r) => ({ library, ...r }))),
   );
-  const immutables = Object.values(deployedBytecode.immutableReferences ?? {}).flat();
-  return { code: Buffer.from(hex, "hex"), links, immutables };
+  const immutableGroups = Object.values(deployedBytecode.immutableReferences ?? {});
+  return { code: Buffer.from(hex, "hex"), links, immutables: immutableGroups.flat(), immutableGroups };
 }
 
 async function deployedCode(address) {
@@ -40,13 +40,30 @@ function same(label, onchain, built, masked) {
   }
   if (onchain.equals(built)) return true;
   const at = built.findIndex((b, i) => b !== onchain[i]);
-  failures.push(`${label}: differs from the build (lengths ${onchain.length}/${built.length}, first difference at byte ${at})`);
+  const where = at < 0 ? "the build is a prefix of the deployed code" : `first difference at byte ${at}`;
+  failures.push(`${label}: differs from the build (lengths ${onchain.length}/${built.length}, ${where})`);
   return false;
 }
 
 async function check(name, address) {
-  const { code, links, immutables } = artifact(name);
+  const { code, links, immutables, immutableGroups } = artifact(name);
   const onchain = await deployedCode(address);
+
+  // The comparison masks immutables and library addresses, so first check
+  // they are consistent: every reference to one immutable holds the same
+  // bytes, and every call site of one library the same address. The getters
+  // below then pin each immutable's value.
+  immutableGroups.forEach((group, i) => {
+    const values = new Set(group.map(({ start, length }) => onchain.subarray(start, start + length).toString("hex")));
+    if (values.size !== 1) failures.push(`${name}: immutable #${i} holds ${values.size} different values across its references`);
+  });
+  const sites = new Map();
+  for (const { library, start } of links) {
+    const set = sites.get(library) ?? new Set();
+    set.add(onchain.subarray(start, start + 20).toString("hex"));
+    sites.set(library, set);
+  }
+  for (const [library, set] of sites) if (set.size !== 1) failures.push(`${name}: calls ${set.size} different addresses for ${library}`);
 
   // Each linked library: the address the deployed code calls, and its code.
   const libraries = new Map();

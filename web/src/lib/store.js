@@ -79,6 +79,7 @@ export function addNote(chain, note) {
 
 /** Saves the key to a file and marks it as downloaded. The mark stays out of the file. */
 export function downloadNote(note) {
+  // The file is saved first; only the "downloaded" mark below can fail.
   const { saved: _saved, ...key } = note;
   const blob = new Blob([serializeNote(key)], { type: "application/json" });
   const a = document.createElement("a");
@@ -91,7 +92,11 @@ export function downloadNote(note) {
     const n = tryParse(t);
     return n && n.k === note.k ? serializeNote({ ...n, saved: true }) : t;
   });
-  writeRaw(note.chain, list);
+  try {
+    writeRaw(note.chain, list);
+  } catch (e) {
+    throw new Error("The key file was saved, but this browser did not record it as downloaded.", { cause: e });
+  }
 }
 
 /**

@@ -17,7 +17,7 @@ const COPY = {
     tab: "Solana",
     sub: "Compliant mirror-pool",
     lead: "Solana has privacy without compliance: its privacy pools screen deposits through off-chain APIs, and nothing on chain says a withdrawal came from clean funds.",
-    how: "Here a curator publishes a clean set of deposits. A withdrawal proves its deposit is in that set, without saying which one, and the pool pays only against that proof. This is a layer, not another pool: any Solana privacy pool can require the same public clearance. Here it wraps mirror-pool, winner of Superteam Brasil's Noise bounty, unchanged.",
+    how: "Here a curator publishes a clean set of deposits. A withdrawal proves its deposit is in that set, without saying which one, and the pool pays only against that proof. This is a layer, not another pool: any Solana privacy pool can require the same public clearance. Here it wraps mirror-pool, one of the winners of Superteam Brasil's Noise bounty, unchanged.",
     consoleTitle: "Curator console",
     consoleHow: "The curator applies a published policy. Blocking a depositor starts a new epoch and publishes a clean root without them, in one transaction, with the clean set in its memo.",
   },

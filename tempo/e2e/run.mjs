@@ -10,7 +10,7 @@
 // Every transaction is recorded in deployments/<chainId>-e2e.json.
 
 import { randomBytes } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { encodeFunctionData } from "viem";
 import { generatePrivateKey, privateKeyToAddress } from "viem/accounts";
 import { hasher, FIELD } from "../../sdk/src/tree.mjs";
@@ -97,15 +97,22 @@ await withdrawFor("alice");
 await withdrawFor("carol");
 
 // ------------------------------------------------ 4. Bob's note is not provable
+// The witness generator reports the failed constraint's line. Only a failure
+// at the clean-root check counts: a missing file or a typo must not pass.
+const circuit = readFileSync(new URL("../../circuits/withdraw.circom", import.meta.url), "utf8").split("\n");
+const cleanRootLine = circuit.findIndex((l) => l.includes("cleanRoot === cleanTree.root")) + 1;
 let refused = false;
+const seen = [];
 const quiet = { log: console.log, error: console.error };
-console.log = console.error = () => {}; // the witness generator reports the failed constraint
+console.log = console.error = (...a) => seen.push(a.join(" "));
 try {
   await prove(
     { note: notes.bob, index: notes.bob.index, poolLeaves: synced.leaves, excluded: synced.excluded, binding: 1n },
     proving,
   );
-} catch {
+} catch (e) {
+  const line = Number((seen.join("\n") + String(e?.message)).match(/line: (\d+)/)?.[1]);
+  if (line !== cleanRootLine) throw new Error(`Bob's proof failed, but not at the clean-root check: ${e?.message}`, { cause: e });
   refused = true;
 } finally {
   Object.assign(console, quiet);

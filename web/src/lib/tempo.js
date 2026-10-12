@@ -58,7 +58,10 @@ export function tempoChain(cfg) {
 
     async noteStatus(note, pool) {
       const c = await commitmentOf(note);
-      const index = pool.synced.leaves.findIndex((l) => l === c);
+      // The same commitment can sit at more than one index, if someone copied
+      // it; any of them proves the note, so prefer one still in the clean set.
+      const matches = pool.synced.leaves.flatMap((l, i) => (l === c ? [i] : []));
+      const index = matches.find((i) => !pool.synced.excluded.includes(i)) ?? matches[0] ?? -1;
       const spent = index >= 0 && (await read("spent", [await nullifierOf(note)]));
       if (index < 0) return { index, label: "Not deposited" };
       if (spent) return { index, label: "Withdrawn", tone: "done" };
@@ -69,6 +72,8 @@ export function tempoChain(cfg) {
 
     /** `keep` stores the key before anything is sent, so a lost confirmation cannot lose it. */
     async deposit(step, keep) {
+      const have = await publicClient.readContract({ address: cfg.token, abi: T.TIP20_ABI, functionName: "balanceOf", args: [me] });
+      if (have < BigInt(cfg.denomination)) throw new Error(`This wallet holds ${unit(have)}. Get test funds first.`);
       const note = createNote(scope);
       keep(note);
       step("Created a withdrawal key in this browser", { detail: "Two random field elements, k and r. They stay in this browser unless you download the key.", done: true });
@@ -90,7 +95,12 @@ export function tempoChain(cfg) {
 
     async withdraw(note, recipient, pool, step, retried = false) {
       const fee = BigInt(cfg.fee);
-      await this.sweep(step);
+      try {
+        await this.sweep(step);
+      } catch (e) {
+        // Another keeper may have swept first. The relayer sweeps again before submitting anyway.
+        step(`The keeper's sweep did not go through (${e.message}). The relayer applies the policy before submitting`, { done: true });
+      }
       pool = await this.pool();
       const { index } = await this.noteStatus(note, pool);
       const { leaves, excluded } = pool.synced;
@@ -120,8 +130,8 @@ export function tempoChain(cfg) {
       } catch (e) {
         // An exclusion landed after this proof was made, so its clean root is
         // stale. Prove again against the new one, once.
-        if (retried || !/StaleCleanRoot/.test(e.message)) throw e;
-        step("The clean set changed while proving, so its root is stale. Proving again", { done: true });
+        if (retried || !/StaleCleanRoot|UnknownPoolRoot/.test(e.message)) throw e;
+        step("The pool changed while proving, so the proof's root is no longer accepted. Proving again", { done: true });
         return this.withdraw(note, recipient, pool, step, true);
       }
       if (out.swept?.tx) {
@@ -165,7 +175,7 @@ export function tempoChain(cfg) {
     },
 
     async block(address, step) {
-      step(`The issuer adds ${short(address)} to the TIP-403 blacklist and calls exclude, in one batch transaction`);
+      step(`The issuer adds ${short(address)} to the TIP-403 blacklist and excludes its deposits: the block and the first three excludes in one batch transaction`);
       const r = await post("/api/tempo/block", { address });
       step(`Excluded ${indices(r.excluded)} from the clean set`, {
         tx: r.tx,
