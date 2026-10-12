@@ -61,7 +61,7 @@ Read back from devnet afterwards:
 
 - **The pool:** 3 deposits and 2 settled spends, owned by the compliant pool program.
 - **Each fresh beneficiary:** holds 0.099 SOL, the denomination minus the relay's fee.
-- **The curator:** its account is owned by the compliance program, at epoch 0.
+- **The curator:** its account is owned by the compliance program, at epoch 0 at that point. Each block in the demo has moved it forward since.
 - **Bob's note:** cannot be proved against the published clean set.
 
-The full record is `deployments/devnet-e2e.json`. The curator's published clean set is `deployments/devnet-curator.json`, and its policy is `deployments/devnet-policy.json`.
+The full record is `deployments/devnet-e2e.json`. The curator's clean set in force is the memo of its latest publication, on chain, and its genesis policy is `deployments/devnet-policy.json`.

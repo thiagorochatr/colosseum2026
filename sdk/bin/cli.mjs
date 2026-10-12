@@ -86,6 +86,9 @@ const tempo = {
     const relayerUrl = opts.relayer ?? "http://127.0.0.1:8787";
     const info = await (await fetch(`${relayerUrl}/info`)).json();
     const fee = BigInt(opts.fee ?? info.fee);
+    // The relayer names its own fee, and the pool only caps it at the whole deposit.
+    const maxFee = opts["max-fee"] !== undefined ? BigInt(opts["max-fee"]) : BigInt(note.denomination) / 20n;
+    if (fee > maxFee) throw new Error(`the relayer asks ${fee}, above the ${maxFee} --max-fee allows`);
     const { synced, index } = await tempoFind(ctx, note);
     if (index < 0) throw new Error("this note was never deposited");
     if (synced.excluded.includes(index)) throw new Error("this note is outside the clean set: its depositor is no longer authorized by the issuer");
@@ -122,6 +125,8 @@ const solanaSend = (ctx, ixs, signers) =>
 
 async function solanaFind(ctx, note) {
   const pool = new ctx.web3.PublicKey(note.pool);
+  // The clean set in ctx is the network pool's: a note from another pool cannot use it.
+  if (!pool.equals(S.poolAddress(ctx.program, BigInt(ctx.dep.denomination)))) throw new Error("this note is for another pool than the network's");
   const synced = await S.syncPool(ctx.connection, ctx.program, pool);
   const c = await commitmentOf(note);
   return { pool, synced, index: synced.leaves.findIndex((l) => l === c) };
@@ -165,6 +170,8 @@ const solana = {
     const beneficiary = new ctx.web3.PublicKey(opts.to);
     const binding = S.actionBinding({ beneficiary: beneficiary.toBytes(), relay: relay.publicKey.toBytes(), relayFee: fee });
     const { proof, input } = await prove({ note: circuitNote(note), index, poolLeaves: leaves, excluded: ctx.set.excluded, binding }, proving);
+    // The memo's clean set must rebuild to the root the curator holds, before any fee is paid.
+    if (BigInt(input.cleanRoot) !== ctx.set.cleanRoot) throw new Error("the curator's memo does not rebuild to its clean root");
     const inputs = [input.poolRoot, input.cleanRoot, input.nullifierHash, input.binding];
     const nullifier = S.fieldBytes(await nullifierOf(note));
     const sig = await solanaSend(ctx, [
@@ -209,7 +216,7 @@ const { positionals, values } = parseArgs({
   options: {
     chain: { type: "string" }, network: { type: "string" }, out: { type: "string" }, note: { type: "string" },
     key: { type: "string" }, keypair: { type: "string" }, to: { type: "string" }, relayer: { type: "string" },
-    "relay-keypair": { type: "string" }, fee: { type: "string" }, "allow-below-floor": { type: "boolean" },
+    "relay-keypair": { type: "string" }, fee: { type: "string" }, "max-fee": { type: "string" }, "allow-below-floor": { type: "boolean" },
   },
 });
 const [cmd, sub] = positionals;

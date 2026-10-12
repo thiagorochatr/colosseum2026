@@ -14,7 +14,7 @@ What this project does not do, and short answers to the questions it is most oft
 | **A window of seconds on Tempo** | A depositor who sees their own block coming can withdraw before the exclusion lands. | The same holds for the token itself: a holder can move funds before a freeze. The issuer closes it by blocking and excluding in one batch; otherwise the keeper narrows it to seconds. |
 | **The keeper does not run around the clock** | Vercel's free cron runs once a day. | The demo relayer applies the policy before every withdrawal it submits. A permanent keeper is on the roadmap. |
 | **The relayer sees an IP address and a recipient** | Every relayer does. | It never sees which deposit pays. Deposit and withdraw in separate sessions, use Tor or a VPN, use several relayers, or withdraw yourself with the command line. |
-| **High gas on Tempo** | About 3.5M gas per deposit: Poseidon in Solidity, and new storage. | Fractions of a cent on Moderato. Optimizing is future work. |
+| **High gas on Tempo** | About 3M gas per deposit, 3.5M with the approve in the same batch: Poseidon in Solidity, and new storage. | Fractions of a cent on Moderato. Optimizing is future work. |
 | **Native SOL only on Solana** | mirror-pool moves lamports. | SPL and Token-2022, on the roadmap. |
 | **Upgradeable Solana programs** | Test network. | CI rebuilds them from source daily and compares them byte for byte with devnet, so a swap is caught within a day. The Tempo pool has no owner and cannot be upgraded. |
 | **Not audited** | Hackathon. | Tests, reproducible builds and [SECURITY.md](../SECURITY.md) say so plainly. |

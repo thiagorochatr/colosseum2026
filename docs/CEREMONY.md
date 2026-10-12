@@ -21,7 +21,7 @@ The starting key has no contribution yet and is deterministic:
 
 ```sh
 cd circuits && npm run build
-npx snarkjs groth16 setup build/withdraw.r1cs ptau/ppot_0080_14.ptau withdraw_0000.zkey
+npx snarkjs groth16 setup build/withdraw.r1cs ptau/ppot_0080_14.ptau ceremony/withdraw_0000.zkey
 ```
 
 ### The beacon, announced in advance
@@ -73,7 +73,9 @@ The script now calls snarkjs's `zKey.contribute` API from `contribute.mjs`, with
 
 Phase 2 has a single human contributor. The final key is sound if that contribution's entropy was destroyed, which only the contributor can attest to. The beacon does not change that: it stops the last contributor from choosing the result, but it does not replace an honest contribution. This is acceptable for test networks and is not enough for real value.
 
-The ceremony is open. Anyone can add a contribution on top of the final key with `circuits/ceremony/contribute.sh`, apply a new beacon, and the verifiers on both chains are regenerated from the result.
+The ceremony is open. Anyone can download `withdraw_final.zkey` from the release into `circuits/ceremony/`, add a contribution on top of it with `sh ceremony/contribute.sh "Your name" withdraw_final.zkey`, and apply a new announced beacon with `finalize.sh`. The verifiers on both chains are then regenerated from the result and redeployed.
+
+The beacon's name in the transcript reads `(announced slot 45509:` because snarkjs keeps only the first 64 characters of a contribution's name. The slot is 455,095,000, as `beacon.json` records.
 
 ## Verifying
 
