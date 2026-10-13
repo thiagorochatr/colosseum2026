@@ -2,7 +2,7 @@
 // blocking or unblocking a depositor. The pool and the token's policy do the
 // enforcing.
 
-import { createPublicClient, defineChain, http } from "viem";
+import { createPublicClient, defineChain, encodeFunctionData, http } from "viem";
 import { tempoModerato } from "viem/chains";
 import { Account, createClient } from "viem/tempo";
 import * as T from "compliance-sdk/tempo";
@@ -10,11 +10,15 @@ import { TEMPO, secret, isAddress } from "./common.mjs";
 
 const chain = TEMPO.rpc === tempoModerato.rpcUrls.default.http[0] ? tempoModerato : defineChain({ ...tempoModerato, rpcUrls: { default: { http: [TEMPO.rpc] } } });
 const publicClient = createPublicClient({ chain, transport: http(TEMPO.rpc, T.RETRY) });
-const wallet = (key) => createClient({ account: Account.fromSecp256k1(key), chain, transport: http(TEMPO.rpc, T.RETRY), feeToken: "0x20C0000000000000000000000000000000000000" });
+// pathUSD, the stablecoin every account here pays its fees in.
+const FEE_TOKEN = "0x20C0000000000000000000000000000000000000";
+const wallet = (key) => createClient({ account: Account.fromSecp256k1(key), chain, transport: http(TEMPO.rpc, T.RETRY), feeToken: FEE_TOKEN });
 const issuer = () => wallet(secret("TEMPO_ISSUER_KEY"));
 const relayerKey = () => secret("TEMPO_RELAYER_KEY");
 export const relayerAddress = () => Account.fromSecp256k1(relayerKey()).address;
 const MINT = 300_000_000n;
+// Enough pathUSD for a visitor's fees, when Moderato's faucet cannot send it.
+const GAS = 10_000_000n;
 
 const balance = (who) => publicClient.readContract({ address: TEMPO.token, abi: T.TIP20_ABI, functionName: "balanceOf", args: [who] });
 
@@ -85,12 +89,24 @@ export const tempoActions = {
   /** Gas stablecoins from Moderato's faucet, and Demo USD from the issuer. */
   async faucet({ address }) {
     if (!isAddress(address)) throw new Error("not an address");
-    await publicClient.request({ method: "tempo_fundAddress", params: [address] });
-    if ((await balance(address)) >= 2n * BigInt(TEMPO.denomination)) return { minted: "0", note: "already funded" };
-    const tx = await sendCalls(issuer(), [
-      { to: TEMPO.token, data: (await import("viem")).encodeFunctionData({ abi: [{ type: "function", name: "mint", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [], stateMutability: "nonpayable" }], functionName: "mint", args: [address, MINT] }) },
-    ]);
-    return { minted: MINT.toString(), tx };
+    const erc20 = [
+      { type: "function", name: "mint", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [], stateMutability: "nonpayable" },
+      { type: "function", name: "transfer", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [{ type: "bool" }], stateMutability: "nonpayable" },
+      { type: "function", name: "balanceOf", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" },
+    ];
+    const calls = [];
+    try {
+      await publicClient.request({ method: "tempo_fundAddress", params: [address] });
+    } catch {
+      // Moderato's faucet is sometimes down. The issuer then pays for the fees itself.
+      const gas = await publicClient.readContract({ address: FEE_TOKEN, abi: erc20, functionName: "balanceOf", args: [address] });
+      if (gas < GAS) calls.push({ to: FEE_TOKEN, data: encodeFunctionData({ abi: erc20, functionName: "transfer", args: [address, GAS] }) });
+    }
+    const mint = (await balance(address)) < 2n * BigInt(TEMPO.denomination);
+    if (mint) calls.push({ to: TEMPO.token, data: encodeFunctionData({ abi: erc20, functionName: "mint", args: [address, MINT] }) });
+    if (calls.length === 0) return { minted: "0", note: "already funded" };
+    const tx = await sendCalls(issuer(), calls);
+    return mint ? { minted: MINT.toString(), tx } : { minted: "0", note: "already funded", tx };
   },
 
   /** Submits a withdrawal and pays the gas; the pool pays the fee bound into the proof. */
