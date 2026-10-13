@@ -4,6 +4,7 @@ Alibi is a compliance layer for private payments. A withdrawal proves in zero kn
 
 | | |
 |---|---|
+| Colosseum project | [colosseum.com/arena/projects/alibi](https://colosseum.com/arena/projects/alibi) |
 | Live product | [alibi.thiagorochatr.com](https://alibi.thiagorochatr.com) (Solana devnet and Tempo testnet, no wallet needed) |
 | Pitch video | [loom.com/share/6d4330e699114f37b0b0889c7de95003](https://www.loom.com/share/6d4330e699114f37b0b0889c7de95003) |
 | Demo video | [loom.com/share/f76036bde8964fff8ccde29b26640972](https://www.loom.com/share/f76036bde8964fff8ccde29b26640972) |
