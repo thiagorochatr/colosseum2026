@@ -35,6 +35,14 @@
     {
       "source": "/solana/",
       "destination": "/index.html"
+    },
+    {
+      "source": "/deck",
+      "destination": "/deck/index.html"
+    },
+    {
+      "source": "/deck/",
+      "destination": "/deck/index.html"
     }
   ]
 }

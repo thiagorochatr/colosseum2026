@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alibi · pitch deck</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="description" content="Alibi: private payments that keep the issuer's rules, on Solana and Tempo, with one zero-knowledge proof.">
+<meta property="og:title" content="Alibi · pitch deck">
+<meta property="og:description" content="Private payments that keep the issuer's rules, on Solana and Tempo, with one zero-knowledge proof.">
+<meta property="og:image" content="https://alibi.thiagorochatr.com/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@alibi_zk">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;background:#0d0e10;color:#eceef1;font-family:'Inter',Arial,sans-serif}
+header{max-width:1400px;margin:0 auto;padding:20px 16px;display:flex;justify-content:space-between;gap:16px;font-size:15px}
+header a{color:#aeb4bd;text-decoration:none}
+header a:hover{color:#eceef1}
+main{max-width:1400px;margin:0 auto;padding:0 16px 32px;display:flex;flex-direction:column;gap:16px}
+.frame{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border:1px solid #24272c;border-radius:8px}
+.frame section{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;transform:scale(var(--s,.5))}
+h1,h2,h3,p,ul,ol{margin:0}
+ul,ol{padding-left:44px}
+li{margin-bottom:8px}
+a{color:inherit}
+table{width:100%;border-collapse:collapse}
+th,td{padding:.55em .6em;text-align:left;border-bottom:1px solid #24272c;font-weight:400}
+th{font-weight:600}
+@page{size:1920px 1080px;margin:0}
+@media print{
+  header{display:none}
+  html,body{width:1920px}
+  main{display:block;max-width:none;padding:0}
+  .frame{width:1920px;height:1080px;border:0;border-radius:0;break-after:page}
+  .frame:last-child{break-after:auto}
+  .frame section{transform:none}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+<header><a href="/">Alibi</a><a href="https://x.com/alibi_zk">@alibi_zk</a></header>
+<main>
+<div class="frame"><section id="cover" data-transition="fade" style="background:#0d0e10;color:#eceef1;font-family:'Inter', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:center;gap:32px">
+<svg aria-label="Alibi logo: a dot between two curly braces" width="160" height="160" viewBox="0 0 160 160" style="width:160px;height:160px"><g transform="scale(2.5)"><rect width="64" height="64" rx="14" fill="#15171a"/><g fill="none" stroke="#7c9cff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M23 14c-5 0-6 3-6 7v5c0 4-2 6-5 6 3 0 5 2 5 6v5c0 4 1 7 6 7"/><path d="M41 14c5 0 6 3 6 7v5c0 4 2 6 5 6-3 0-5 2-5 6v5c0 4-1 7-6 7"/></g><circle cx="32" cy="32" r="6" fill="#7c9cff"/></g></svg>
+<h1 style="font-family:'Instrument Serif', Georgia, serif;font-size:200px;font-weight:400;line-height:1">Alibi</h1>
+<p style="font-size:44px;line-height:1.3;color:#eceef1">Private payments that keep the issuer’s rules.</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#aeb4bd">Solana · Tempo · one zero-knowledge proof</p>
+</section></div>
+<div class="frame"><section id="problem" data-transition="fade" style="background:#0d0e10;color:#eceef1;font-family:'Inter', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:space-between;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">Problem</p>
+<h2 style="font-family:'Instrument Serif', Georgia, serif;font-size:80px;font-weight:400;line-height:1.1">Solana’s privacy pools screen once, at the door</h2>
+</div>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">Checked at deposit</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">Pools screen a deposit through an off-chain API, once, when it arrives.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">Flagged later, still exits</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">Funds flagged after they were deposited withdraw like any others.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">Nothing to show</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">Nothing on chain tells a partner that a withdrawal came from clean funds.</p>
+</div>
+</div>
+<p style="font-size:32px;line-height:1.4;color:#eceef1">That gap stands between these pools and exchanges, offramps and institutions.</p>
+</section></div>
+<div class="frame"><section id="idea" data-transition="fade" style="background:#7c9cff;color:#0b0d12;font-family:'Inter', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:center;gap:48px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#0b0d12">The idea</p>
+<h2 style="font-family:'Instrument Serif', Georgia, serif;font-size:120px;font-weight:400;line-height:1.05">Prove your deposit is clean, without saying which one is yours.</h2>
+<p style="font-size:44px;line-height:1.3;color:#0b0d12">The check runs at withdrawal, against the rule in force.</p>
+</section></div>
+<div class="frame"><section id="how" data-transition="fade" style="background:#0d0e10;color:#eceef1;font-family:'Inter', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:space-between;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">How it works</p>
+<h2 style="font-family:'Instrument Serif', Georgia, serif;font-size:80px;font-weight:400;line-height:1.1">Four steps, one proof</h2>
+</div>
+<div style="display:flex;align-items:stretch;gap:16px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">1</p>
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">Deposit</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">A fixed amount, with a commitment to secrets that stay in the browser.</p>
+</div>
+<svg aria-hidden="true" width="40" height="24" viewBox="0 0 40 24" style="flex:none;align-self:center"><path d="M2 12h34M26 3l10 9-10 9" fill="none" stroke="#7c9cff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">2</p>
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">Clean set</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">A second tree holds the same deposits, minus those the policy blocks.</p>
+</div>
+<svg aria-hidden="true" width="40" height="24" viewBox="0 0 40 24" style="flex:none;align-self:center"><path d="M2 12h34M26 3l10 9-10 9" fill="none" stroke="#7c9cff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">3</p>
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">Prove</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">The browser proves the deposit is in both trees, bound to one recipient.</p>
+</div>
+<svg aria-hidden="true" width="40" height="24" viewBox="0 0 40 24" style="flex:none;align-self:center"><path d="M2 12h34M26 3l10 9-10 9" fill="none" stroke="#7c9cff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">4</p>
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">Pay</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">The chain checks the proof, and the money goes to a fresh address.</p>
+</div>
+</div>
+<p style="font-size:32px;line-height:1.4;color:#eceef1">Blocked after depositing? The deposit leaves the clean set, and no valid proof exists for it.</p>
+</section></div>
+<div class="frame"><section id="solana" data-transition="fade" style="background:#0d0e10;color:#eceef1;font-family:'Inter', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:space-between;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">On Solana</p>
+<h2 style="font-family:'Instrument Serif', Georgia, serif;font-size:80px;font-weight:400;line-height:1.1">Compliance as a layer any pool can require</h2>
+</div>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">A public clearance</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">A compliance program verifies the proof and writes an account any program can check.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">mirror-pool, unchanged</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">The reference pool is wrapped byte for byte, with one added instruction: a spend tied to a clearance.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">An auditable curator</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">A pluggable role. Its policy hash is on chain, and it can only remove deposits, never add one.</p>
+</div>
+</div>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#eceef1">proof → compliance program → clearance account → pool pays</p>
+</section></div>
+<div class="frame"><section id="tempo" data-transition="fade" style="background:#0d0e10;color:#eceef1;font-family:'Inter', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:space-between;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">On Tempo</p>
+<h2 style="font-family:'Instrument Serif', Georgia, serif;font-size:80px;font-weight:400;line-height:1.1">The same proof, under the issuer’s own policy</h2>
+</div>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">No new trust</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">The clean set comes from the issuer’s TIP-403 policy, on chain. Anyone can apply it, no one can bend it.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">No race</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">The issuer can block an address and exclude its deposits in one batch transaction.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">No owner</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">The pool cannot be upgraded or paused by anyone.</p>
+</div>
+</div>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#eceef1">one circuit · one verifying key · both chains</p>
+</section></div>
+<div class="frame"><section id="numbers" data-transition="fade" style="background:#15171a;color:#eceef1;font-family:'Inter', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:space-between;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">Measured</p>
+<h2 style="font-family:'Instrument Serif', Georgia, serif;font-size:80px;font-weight:400;line-height:1.1">Fast enough for a browser, cheap enough for a transaction</h2>
+</div>
+<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:32px">
+<div style="display:flex;flex-direction:column;gap:16px;background:#0d0e10;padding:40px;border:1px solid #24272c;border-radius:16px">
+<p style="font-family:'Instrument Serif', Georgia, serif;font-size:80px;line-height:1.1;color:#7c9cff">&lt;1 s</p>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">to prove in the browser, after one 6 MB key download</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:16px;background:#0d0e10;padding:40px;border:1px solid #24272c;border-radius:16px">
+<p style="font-family:'Instrument Serif', Georgia, serif;font-size:80px;line-height:1.1;color:#7c9cff">96,954</p>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">compute units to verify the proof on Solana</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:16px;background:#0d0e10;padding:40px;border:1px solid #24272c;border-radius:16px">
+<p style="font-family:'Instrument Serif', Georgia, serif;font-size:80px;line-height:1.1;color:#7c9cff">~126k</p>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">compute units to clear and spend in one transaction</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:16px;background:#0d0e10;padding:40px;border:1px solid #24272c;border-radius:16px">
+<p style="font-family:'Instrument Serif', Georgia, serif;font-size:80px;line-height:1.1;color:#7c9cff">0.94</p>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">of effective anonymity kept when blocking 10% of depositors</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#aeb4bd">Anonymity: random blocklist, Privacy Cash depositors, 95% interval 0.79–1.06. Every number: docs/PROOF.md, docs/ANONYMITY_COST.md.</p>
+</section></div>
+<div class="frame"><section id="landscape" data-transition="fade" style="background:#0d0e10;color:#eceef1;font-family:'Inter', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:space-between;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">Landscape</p>
+<h2 style="font-family:'Instrument Serif', Georgia, serif;font-size:80px;font-weight:400;line-height:1.1">What the alternatives miss</h2>
+</div>
+<table style="font-family:'Inter', Arial, sans-serif;font-size:28px;color:#eceef1">
+<tr><th style="width:36%;text-align:left;color:#7c9cff">Approach</th><th style="width:16%;text-align:left;color:#7c9cff">Where</th><th style="width:48%;text-align:left;color:#7c9cff">What it misses</th></tr>
+<tr><td>Screening at deposit</td><td>Solana pools</td><td>Funds flagged later still exit, with nothing to check</td></tr>
+<tr><td>Token-2022 confidential transfers</td><td>Solana</td><td>Hides amounts, not who pays whom</td></tr>
+<tr><td>Tempo Zones</td><td>Tempo</td><td>An operator sees every transaction</td></tr>
+<tr><td>Privacy Pools (0xbow)</td><td>Ethereum</td><td>Not on Solana or Tempo, not tied to an issuer’s policy</td></tr>
+</table>
+<p style="font-size:32px;line-height:1.4;color:#eceef1">Alibi checks at withdrawal, against the rule in force, and leaves a proof anyone can verify.</p>
+</section></div>
+<div class="frame"><section id="whynow" data-transition="fade" style="background:#0d0e10;color:#eceef1;font-family:'Inter', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:space-between;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">Why now</p>
+<h2 style="font-family:'Instrument Serif', Georgia, serif;font-size:80px;font-weight:400;line-height:1.1">The stack is live, and the buyers are asking in public</h2>
+</div>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">Solana is ready</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">Pairing syscalls, Poseidon and 4 KB transactions are live on mainnet. Range sponsored Solana’s privacy hackathon asking for compliance proofs.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">Tempo needs it</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">It calls the visibility of payments a dealbreaker for enterprises, and lists its private token standard as “coming soon”.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">Ethereum proved it</h3>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">0xbow raised a $3.5M seed to take Privacy Pools to other chains, and has not reached Solana or Tempo.</p>
+</div>
+</div>
+</section></div>
+<div class="frame"><section id="business" data-transition="fade" style="background:#0d0e10;color:#eceef1;font-family:'Inter', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:space-between;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">Business model</p>
+<h2 style="font-family:'Instrument Serif', Georgia, serif;font-size:80px;font-weight:400;line-height:1.1">Verifying is free, operating is paid</h2>
+</div>
+<table style="font-family:'Inter', Arial, sans-serif;font-size:28px;color:#eceef1">
+<tr><th style="width:30%;text-align:left;color:#7c9cff">Customer</th><th style="width:38%;text-align:left;color:#7c9cff">Product</th><th style="width:32%;text-align:left;color:#7c9cff">How they pay</th></tr>
+<tr><td>Privacy pool on Solana</td><td>A clearance check, one more account</td><td>Hosted curation and relaying</td></tr>
+<tr><td>Stablecoin issuer on Tempo</td><td>A private pool under its TIP-403 policy</td><td>Basis points per payment</td></tr>
+</table>
+<p style="font-size:32px;line-height:1.4;color:#eceef1">The code is open source. We earn on what needs uptime: curators, keepers and relayers.</p>
+</section></div>
+<div class="frame"><section id="roadmap" data-transition="fade" style="background:#0d0e10;color:#eceef1;font-family:'Inter', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:space-between;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">Status and plan</p>
+<h2 style="font-family:'Instrument Serif', Georgia, serif;font-size:80px;font-weight:400;line-height:1.1">Working on testnets, next comes mainnet readiness</h2>
+</div>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">Live today</h3>
+<ul style="font-size:32px;line-height:1.4;color:#aeb4bd">
+<li>Solana devnet and Tempo testnet</li>
+<li>Deposit, prove and withdraw in the browser</li>
+<li>Public ceremony, closed with a beacon announced in advance</li>
+<li>Deployed code checked against source in CI</li>
+</ul>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">Next 90 days</h3>
+<ol style="font-size:32px;line-height:1.4;color:#aeb4bd">
+<li>Customer interviews</li>
+<li>Production trusted setup</li>
+<li>Security audit</li>
+<li>Ragequit for excluded depositors</li>
+<li>SPL and Token-2022 pools on Solana</li>
+</ol>
+</div>
+</div>
+<p style="font-size:32px;line-height:1.4;color:#eceef1">Not audited and not on mainnet. A multi-party ceremony and an audit come before any mainnet pool.</p>
+</section></div>
+<div class="frame"><section id="team" data-transition="fade" style="background:#0d0e10;color:#eceef1;font-family:'Inter', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:space-between;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">Team</p>
+<h2 style="font-family:'Instrument Serif', Georgia, serif;font-size:80px;font-weight:400;line-height:1.1">Two builders: cryptography and product</h2>
+</div>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">Thiago Rocha</h3>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">Protocol, circuit, contracts, app</p>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">Blockchain and cryptography R&amp;D at Banco Inter. Built mirror-pool, winner of Superteam Brasil’s Noise bounty. Published thesis on FHE auctions.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15171a;padding:40px;border:1px solid #24272c;border-radius:16px">
+<h3 style="font-family:'Instrument Serif', Georgia, serif;font-size:44px;font-weight:400;line-height:1.2">Stefany Lopes</h3>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">Product and design</p>
+<p style="font-size:32px;line-height:1.4;color:#aeb4bd">Product and project manager in Web3 since 2021. 2× hackathon winner. Member of Superteam Brasil and SheFi Brasil.</p>
+</div>
+</div>
+</section></div>
+<div class="frame"><section id="close" data-transition="fade" style="background:#15171a;color:#eceef1;font-family:'Inter', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:center;gap:48px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7c9cff">Try it</p>
+<h2 style="font-family:'Instrument Serif', Georgia, serif;font-size:120px;font-weight:400;line-height:1.05"><a href="https://alibi.thiagorochatr.com" style="color:#eceef1">alibi.thiagorochatr.com</a></h2>
+<p style="font-size:44px;line-height:1.3;color:#aeb4bd">Deposit, prove and withdraw, or block a depositor and watch the withdrawal fail. No wallet needed.</p>
+<div style="display:flex;gap:64px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#eceef1"><a href="https://x.com/alibi_zk" style="color:#7c9cff">x.com/alibi_zk</a></p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#eceef1"><a href="https://github.com/thiagorochatr/colosseum2026" style="color:#7c9cff">github.com/thiagorochatr/colosseum2026</a></p>
+</div>
+</section></div>
+</main>
+<script>
+function fit(){var f=document.querySelector('.frame');document.documentElement.style.setProperty('--s',f.clientWidth/1920)}
+addEventListener('resize',fit);fit();
+</script>
+</body>
+</html>
